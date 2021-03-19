@@ -1,2 +1,2 @@
 SOURCES += recon.py
-TRANSLATIONS += recon_ru.ts
+TRANSLATIONS += recon_ru-RU.ts
