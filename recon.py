@@ -16,15 +16,15 @@ from PySide2.QtWidgets import QApplication, QCheckBox, QDoubleSpinBox, QAbstract
     QLabel, QProgressBar, QScrollArea, QSizePolicy, QGridLayout, QSpinBox, QTableWidget, QWidget
 
 
-class Signal:
+class Signal(object):
 
-    def __init__(self, name: str = '', unit: str = 'V', data: list = []) -> None:
+    def __init__(self, name: str = '', unit: str = 'V', data: List[float] = None) -> None:
         self.selected: bool = False
         self.name: str = name
         self.unit: str = unit
         self.smooth: int = 1
         self.scale: float = 1.0
-        self.data: List[float] = data
+        self.data: List[float] = data or []
         self.maximum: float = float('-inf')
         self.minimum: float = float('inf')
 
@@ -58,8 +58,8 @@ class Signal:
 class Recon(QMainWindow):
     def __init__(self) -> None:
         self.name: str = ''
-        self.filename: str = ''
-        self.plotName: str = None
+        self.dataFileName: str = ''
+        self.plotFileName: str = None
         self.times: list = []
         self.signals: List[Signal] = []
         self.progressBar: QProgressBar = None
@@ -118,43 +118,57 @@ class Recon(QMainWindow):
         self.dockSignals.setWidget(self.dockSignalsWidget)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dockSignals)
 
+        # File actions
+        actionOpen = QAction(QCoreApplication.translate('Menu', '&Open...'), self)
+        actionOpen.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+O'))
+        actionOpen.setStatusTip(QCoreApplication.translate('Menu', 'Open the recon data in the text format'))
+        actionOpen.triggered.connect(self.openData)
+
+        actionSave = QAction(QCoreApplication.translate('Menu', '&Save'), self)
+        actionSave.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+S'))
+        actionSave.setStatusTip(QCoreApplication.translate('Menu', 'Save the recon data in the text format'))
+        actionSave.triggered.connect(self.saveData)
+
+        actionSaveAs = QAction(QCoreApplication.translate('Menu', 'Save &as...'), self)
+        actionSaveAs.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Shift+S'))
+        actionSaveAs.setStatusTip(QCoreApplication.translate('Menu', 'Save the recon data in the text format as...'))
+        actionSaveAs.triggered.connect(self.saveDataAs)
+
         actionExit = QAction(QCoreApplication.translate('Menu', '&Exit'), self)
         actionExit.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Q'))
         actionExit.setStatusTip(QCoreApplication.translate('Menu', 'Exit application'))
         actionExit.triggered.connect(self.close)
 
-        actionOpen = QAction(QCoreApplication.translate('Menu', '&Open...'), self)
-        actionOpen.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+O'))
-        actionOpen.setStatusTip(QCoreApplication.translate('Menu', 'Open the recon data in the text format'))
-        actionOpen.triggered.connect(self.open)
+        # Plot actions
+        actionSavePlot = QAction(QCoreApplication.translate('Menu', '&Save plot'), self)
+        actionSavePlot.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Alt+S'))
+        actionSavePlot.setStatusTip(QCoreApplication.translate('Menu', 'Save plot'))
+        actionSavePlot.triggered.connect(self.savePlot)
 
-        actionSave = QAction(QCoreApplication.translate('Menu', '&Save'), self)
-        actionSave.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+S'))
-        actionSave.setStatusTip(QCoreApplication.translate('Menu', 'Save plot'))
-        actionSave.triggered.connect(self.save)
+        actionSavePlotAs = QAction(QCoreApplication.translate('Menu', 'Save plot &as...'), self)
+        actionSavePlotAs.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Alt+Shift+S'))
+        actionSavePlotAs.setStatusTip(QCoreApplication.translate('Menu', 'Save plot as...'))
+        actionSavePlotAs.triggered.connect(self.savePlotAs)
 
-        actionSaveAs = QAction(QCoreApplication.translate('Menu', 'Save &as...'), self)
-        actionSaveAs.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Shift+S'))
-        actionSaveAs.setStatusTip(QCoreApplication.translate('Menu', 'Save plot as...'))
-        actionSaveAs.triggered.connect(self.saveAs)
-
+        # Viev actions
         actionSignalsDock = self.dockSignals.toggleViewAction()
         actionSignalsDock.setStatusTip(QCoreApplication.translate('Menu', 'Show/hide signals window'))
 
+        # Help actions
         actionAboutQt = QAction(QCoreApplication.translate('Menu', 'About Qt...'), self)
         actionAboutQt.triggered.connect(QApplication.aboutQt)
 
         menubar = self.menuBar()
         menuFile = menubar.addMenu(QCoreApplication.translate('Menu', '&File'))
+        menuPlot = menubar.addMenu(QCoreApplication.translate('Menu', '&Plot'))
         menuView = menubar.addMenu(QCoreApplication.translate('Menu', '&View'))
         menuHelp = menubar.addMenu(QCoreApplication.translate('Menu', '&Help'))
 
-        menuFile.addAction(actionOpen)
-        menuFile.addSeparator()
-        menuFile.addAction(actionSave)
-        menuFile.addAction(actionSaveAs)
+        menuFile.addActions([actionOpen, actionSave, actionSaveAs])
         menuFile.addSeparator()
         menuFile.addAction(actionExit)
+
+        menuPlot.addActions([actionSavePlot, actionSavePlotAs])
 
         menuView.addAction(actionSignalsDock)
 
@@ -173,82 +187,6 @@ class Recon(QMainWindow):
     def closeEvent(self, event) -> None:
         self.saveSession()
         event.accept()
-
-    def open(self) -> None:
-        try:
-            dialog = QFileDialog(self)
-            dialog.setAcceptMode(QFileDialog.AcceptOpen)
-            dialog.setDirectory(QSettings().value('default_path', QStandardPaths.DocumentsLocation))
-            dialog.setNameFilter(QCoreApplication.translate('FileDialog', 'Recon data files(*.txt)'))
-            dialog.setWindowTitle(QCoreApplication.translate('FileDialog', 'Open recon data file'))
-            dialog.fileSelected.connect(self.load)
-            dialog.open()
-        except Exception as e:
-            print(e)
-
-    def load(self, filename: str) -> None:
-        if os.path.isfile(filename):
-            self.filename = filename
-
-            # Save path for next use
-            QSettings().setValue('default_path', os.path.dirname(os.path.abspath(filename)))
-
-            # Change window title
-            self.setWindowTitle(QCoreApplication.translate('FileDialog', 'Recon plotter - {0}').format(self.filename))
-
-            # Reset signals
-            self.times.clear()
-            self.signals.clear()
-
-            # Open data file
-            with open(self.filename, 'r', encoding='cp1251') as df:
-
-                # Get total size
-                total = os.fstat(df.fileno()).st_size
-                self.progressBegin(total)
-
-                # Get name of the recon record
-                if line := df.readline():
-                    if len(line):
-                        self.name = line.split(',')[0]
-
-                # Get signal names
-                while (line := df.readline()) != '':
-                    if line.startswith('         1'):
-                        continue
-                    if line.startswith('         N'):
-                        break
-                    if len(line) and line != '\n':
-                        data = line.split(',')
-                        if len(data) >= 3:
-                            self.signals.append(Signal(data[2].strip()))
-
-                # Update progress
-                self.progressUpdate(df.tell())
-                lasttime = time()
-
-                # Get signal data
-                while line := df.readline():
-                    values = line.split(',')
-                    if len(values) == (len(self.signals) + 3):
-                        if values[0].strip() == 'N':
-                            continue
-                        if values[0].strip() == '':
-                            for i in range(len(self.signals)):
-                                self.signals[i].unit = values[i+2].strip()
-                            continue
-                        for i in range(len(self.signals)):
-                            self.signals[i].append(float(values[i+2].strip()))
-                        self.times.append(float(values[1].strip()))
-
-                    # Update progress avery 100 milliseconds
-                    newtime = time()
-                    if (newtime - lasttime > 0.1):
-                        lasttime = newtime
-                        self.progressUpdate(df.tell())
-
-            self.progressEnd()
-            self.rebuildSignalsDock()
 
     def rebuildSignalsDock(self) -> None:
 
@@ -335,25 +273,162 @@ class Recon(QMainWindow):
     def progressEnd(self) -> None:
         self.statusBar().removeWidget(self.progressBar)
 
-    def save(self) -> None:
-        if self.plotName is None:
-            self.saveAs()
-        else:
-            self.savePlot(self.plotName)
-
-    def saveAs(self) -> None:
+    def openData(self) -> None:
         try:
             dialog = QFileDialog(self)
-            dialog.setAcceptMode(QFileDialog.AcceptSave)
-            dialog.setDirectory(QSettings().value('default_path', '/home'))
-            dialog.setNameFilter(QCoreApplication.translate('FileDialog', 'PNG Image(*.png);;SVG Image(*.svg);;PDF Document(*.pdf)'))
-            dialog.setWindowTitle(QCoreApplication.translate('FileDialog', 'Save plot'))
-            dialog.fileSelected.connect(self.savePlot)
+            dialog.setAcceptMode(QFileDialog.AcceptOpen)
+            dialog.setDirectory(QSettings().value('default_data_path', QStandardPaths.standardLocations(QStandardPaths.DocumentsLocation)[0]))
+            dialog.setNameFilter(QCoreApplication.translate('FileDialog', 'Recon data files(*.txt)'))
+            dialog.setWindowTitle(QCoreApplication.translate('FileDialog', 'Open recon data file'))
+            dialog.fileSelected.connect(self._load)
             dialog.open()
         except Exception as e:
             print(e)
 
-    def savePlot(self, filename: str) -> None:
+    def saveData(self):
+        if os.path.isfile(self.dataFileName):
+            self._save(self.dataFileName)
+        else:
+            self.saveDataAs()
+
+    def saveDataAs(self):
+        try:
+            dialog = QFileDialog(self)
+            dialog.setAcceptMode(QFileDialog.AcceptSave)
+            dialog.setDirectory(QSettings().value('default_data_path', QStandardPaths.standardLocations(QStandardPaths.DocumentsLocation)[0]))
+            dialog.setNameFilter(QCoreApplication.translate('FileDialog', 'Recon data files(*.txt)'))
+            dialog.setWindowTitle(QCoreApplication.translate('FileDialog', 'Save recon data file'))
+            dialog.fileSelected.connect(self._save)
+            dialog.open()
+        except Exception as e:
+            print(e)
+
+    def savePlot(self) -> None:
+        if os.path.isfile(self.plotFileName):
+            self.savePlotAs()
+        else:
+            self._savePlot(self.plotFileName)
+
+    def savePlotAs(self) -> None:
+        dialog = QFileDialog(self)
+        dialog.setAcceptMode(QFileDialog.AcceptSave)
+        dialog.setDirectory(QSettings().value('default_plot_path', QStandardPaths.standardLocations(QStandardPaths.DocumentsLocation)[0]))
+        dialog.setNameFilter(QCoreApplication.translate('FileDialog', 'PNG Image(*.png);;SVG Image(*.svg);;PDF Document(*.pdf)'))
+        dialog.setWindowTitle(QCoreApplication.translate('FileDialog', 'Save plot'))
+        dialog.fileSelected.connect(self._savePlot)
+        dialog.open()
+
+    def _load(self, filename: str) -> None:
+        if os.path.isfile(filename):
+            self.filename = filename
+
+            # Save path for next use
+            QSettings().setValue('default_data_path', os.path.dirname(os.path.abspath(filename)))
+
+            # Change window title
+            self.setWindowTitle(QCoreApplication.translate('Main', 'Recon plotter - {0}').format(self.filename))
+
+            # Reset signals
+            self.times.clear()
+            self.signals.clear()
+
+            # Open data file
+            with open(self.filename, 'r', encoding='cp1251') as df:
+
+                # Get total size
+                total = os.fstat(df.fileno()).st_size
+                self.progressBegin(total)
+
+                # Get name of the recon record
+                if line := df.readline():
+                    if len(line):
+                        self.name = line.split(',')[0]
+
+                # Get signal names
+                while (line := df.readline()) != '':
+                    if line.startswith('         1'):
+                        continue
+                    if line.startswith('         N'):
+                        break
+                    if len(line) and line != '\n':
+                        data = line.split(',')
+                        if len(data) >= 3:
+                            self.signals.append(Signal(data[2].strip()))
+
+                # Update progress
+                self.progressUpdate(df.tell())
+                lasttime = time()
+
+                # Get signal data
+                while line := df.readline():
+                    values = line.split(',')
+                    if len(values) == (len(self.signals) + 3):
+                        if values[0].strip() == 'N':
+                            continue
+                        if values[0].strip() == '':
+                            for i in range(len(self.signals)):
+                                self.signals[i].unit = values[i+2].strip()
+                            continue
+                        for i in range(len(self.signals)):
+                            self.signals[i].append(float(values[i+2].strip()))
+                        self.times.append(float(values[1].strip()))
+
+                    # Update progress avery 100 milliseconds
+                    newtime = time()
+                    if (newtime - lasttime > 0.1):
+                        lasttime = newtime
+                        self.progressUpdate(df.tell())
+
+            self.progressEnd()
+            self.rebuildSignalsDock()
+
+    def _save(self, filename: str) -> None:
+        with open(filename, 'w', encoding='cp1251') as df:
+
+            self.progressBegin(len(self.times))
+            lasttime = time()
+
+            # write header
+            df.write(f'{filename},,\n\n')
+
+            # write signals descriptions
+            for i in range(len(self.signals)):
+                ak = str(f'АК-{i+1}')
+                df.write(f'{i+2:4d},{ak:>6s}, {self.signals[i].name}\n')
+            df.write('\n         1,              2,')
+            for i in range(len(self.signals)):
+                df.write(f'{i:10d},')
+            df.write('\n         N,              t,')
+            for i in range(len(self.signals)):
+                ak = str(f'АК-{i+1}')
+                df.write(f'{ak:>10s},')
+            df.write('\n          ,              s,')
+            for i in range(len(self.signals)):
+                df.write(f'{self.signals[i].unit:>10s},')
+            df.write('\n')
+
+            # write data
+            for i in range(len(self.times)):
+
+                # Update progress avery 100 milliseconds
+                newtime = time()
+                if (newtime - lasttime > 0.1):
+                    lasttime = newtime
+                    self.progressUpdate(i)
+
+                # add data row
+                df.write(f'{i:10d},{self.times[i]:15.6f},')
+                for j in range(len(self.signals)):
+                    df.write(f'{self.signals[j].data[i]:10.3f},')
+                df.write('\n')
+
+            self.progressEnd()
+
+            # Change window title
+            self.dataFileName = filename
+            self.setWindowTitle(QCoreApplication.translate('Main', 'Recon plotter - {0}').format(self.filename))
+
+    def _savePlot(self, filename: str) -> None:
         pass
 
 
@@ -368,7 +443,7 @@ if __name__ == "__main__":
     app.installTranslator(qtTranslator)
 
     myTranslator = QTranslator(app)
-    print(myTranslator.load(QLocale(), 'recon', '_', '.', '.qm'))
+    myTranslator.load(QLocale(), 'recon', '_', '.', '.qm')
     app.installTranslator(myTranslator)
 
     window = Recon()
