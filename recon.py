@@ -9,11 +9,12 @@ import os
 import numpy
 from time import time
 from typing import List
-from PySide2.QtGui import QPalette
+from PySide2.QtGui import QIntValidator, QPalette
 from PySide2.QtCore import QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop
-from PySide2.QtWidgets import QApplication, QCheckBox, QDoubleSpinBox, QAbstractItemView,\
+from PySide2.QtWidgets import QApplication, QCheckBox, QAbstractItemView,\
     QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction, QDockWidget,\
-    QLabel, QProgressBar, QScrollArea, QSizePolicy, QGridLayout, QSpinBox, QTableWidget, QWidget
+    QLabel, QProgressBar, QScrollArea, QSizePolicy, QGridLayout, QTableWidget, QWidget,\
+    QStyleFactory
 
 
 class Signal(object):
@@ -224,21 +225,23 @@ class Recon(QMainWindow):
             self.dockSignalsWidget.setCellWidget(i, 2, unitWidget)
 
             # Smooth level
-            smoothWidget = QSpinBox(self.dockSignalsWidget)
+            smoothWidget = QLineEdit(self.dockSignalsWidget)
             smoothWidget.setFrame(False)
-            smoothWidget.setValue(self.signals[i].smooth)
-            smoothWidget.setRange(1, 1000000)
+            smoothWidget.setText(str(self.signals[i].smooth))
+            smoothValidator = QIntValidator(smoothWidget)
+            smoothValidator.setRange(1, 1000000)
+            smoothWidget.setValidator(smoothValidator)
             smoothWidget.setAlignment(Qt.AlignCenter)
-            smoothWidget.valueChanged.connect(self.signals[i].setSmooth)
+            smoothWidget.textChanged.connect(self.signals[i].setSmooth)
             smoothWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
             self.dockSignalsWidget.setCellWidget(i, 3, smoothWidget)
 
             # Scale
-            scaleWidget = QDoubleSpinBox(self.dockSignalsWidget)
+            scaleWidget = QLineEdit(self.dockSignalsWidget)
             scaleWidget.setFrame(False)
             scaleWidget.setAlignment(Qt.AlignCenter)
-            scaleWidget.setValue(self.signals[i].scale)
-            scaleWidget.valueChanged.connect(self.signals[i].setScale)
+            scaleWidget.setText(str(self.signals[i].scale))
+            scaleWidget.textChanged.connect(self.signals[i].setScale)
             scaleWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
             self.dockSignalsWidget.setCellWidget(i, 4, scaleWidget)
 
@@ -437,9 +440,10 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setOrganizationName('Oleksandr Kolodkin')
     app.setApplicationName('Recon Plotter')
+    app.setStyle(QStyleFactory.create('Fusion'))
 
     qtTranslator = QTranslator(app)
-    qtTranslator.load('_qt' + QLocale.system().name(), QLibraryInfo.location(QLibraryInfo.TranslationsPath))
+    qtTranslator.load(QLocale(), 'qt', '_', QLibraryInfo.location(QLibraryInfo.TranslationsPath))
     app.installTranslator(qtTranslator)
 
     myTranslator = QTranslator(app)
