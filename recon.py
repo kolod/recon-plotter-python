@@ -9,15 +9,28 @@ import os
 import numpy
 from time import time
 from typing import List
-from PySide2.QtGui import QIntValidator, QPalette
-from PySide2.QtCore import QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop
+import matplotlib.pyplot as plt
+from PySide2.QtGui import QColor, QIntValidator, QPalette, QMouseEvent
+from PySide2.QtCore import Signal, QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop
 from PySide2.QtWidgets import QApplication, QCheckBox, QAbstractItemView,\
     QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction, QDockWidget,\
     QLabel, QProgressBar, QScrollArea, QSizePolicy, QGridLayout, QTableWidget, QWidget,\
-    QStyleFactory
+    QStyleFactory, QColorDialog
 
 
-class Signal(object):
+class QClicableLabel(QLabel):
+    clicked = Signal()
+
+    def __init__(self, text: str, parent: QWidget) -> None:
+        super(QClicableLabel, self).__init__(text, parent)
+        self.mousePressEvent = self.on_mousePressEvent
+
+    def on_mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+
+
+class AnalogSignal(object):
 
     def __init__(self, name: str = '', unit: str = 'V', data: List[float] = None) -> None:
         self.selected: bool = False
@@ -28,6 +41,7 @@ class Signal(object):
         self.data: List[float] = data or []
         self.maximum: float = float('-inf')
         self.minimum: float = float('inf')
+        self.color: str = 'green'
 
     def smooth(self, n: int):
         window = numpy.ones(n)/n
@@ -48,6 +62,9 @@ class Signal(object):
     def setScale(self, scale: float) -> None:
         self.scale = scale
 
+    def setColor(self, color: str) -> None:
+        self.color = color
+
     def append(self, value: float) -> None:
         self.data.append(value)
         if self.maximum < value:
@@ -62,7 +79,7 @@ class Recon(QMainWindow):
         self.dataFileName: str = ''
         self.plotFileName: str = None
         self.times: list = []
-        self.signals: List[Signal] = []
+        self.signals: List[AnalogSignal] = []
         self.progressBar: QProgressBar = None
         self.dockSignals: QDockWidget = None
         self.dockSignalsWidget: QTableWidget = None
@@ -99,7 +116,8 @@ class Recon(QMainWindow):
         # Signals Dock
         self.dockSignals = QDockWidget(QCoreApplication.translate('SignalsDock', 'Signals'), self)
         self.dockSignals.setObjectName('DockSignals')
-        self.dockSignalsWidget = QTableWidget(0, 7)
+        self.dockSignalsWidget = QTableWidget(0, 8)
+        self.dockSignalsWidget.setAutoFillBackground(True)
         self.dockSignalsWidget.setObjectName('DockSignalsWidget')
         self.dockSignalsWidget.setSelectionMode(QAbstractItemView.NoSelection)
         self.dockSignalsWidget.setHorizontalHeaderLabels([
@@ -110,6 +128,7 @@ class Recon(QMainWindow):
             QCoreApplication.translate('SignalsDock', 'Scale'),
             QCoreApplication.translate('SignalsDock', 'Minimum'),
             QCoreApplication.translate('SignalsDock', 'Maximum'),
+            QCoreApplication.translate('SignalsDock', 'Color'),
         ])
         header = self.dockSignalsWidget.horizontalHeader()
         header.setSectionResizeMode(1, QHeaderView.Stretch)
@@ -263,6 +282,18 @@ class Recon(QMainWindow):
             maxWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
             self.dockSignalsWidget.setCellWidget(i, 6, maxWidget)
 
+            # Color
+            color = QColor(self.signals[i].color)
+            colorWidget = QClicableLabel(color.name(), self.dockSignalsWidget)
+            colorWidget.setAlignment(Qt.AlignCenter)
+            colorWidget.setAutoFillBackground(True)
+            colorWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            palette = colorWidget.palette()
+            palette.setColor(QPalette.Base, color)
+            colorWidget.setPalette(palette)
+            colorWidget.clicked.connect(self._color)
+            self.dockSignalsWidget.setCellWidget(i, 7, colorWidget)
+
     def progressBegin(self, total: int) -> None:
         self.progressBar.setMaximum(total)
         self.progressBar.setValue(0)
@@ -321,6 +352,20 @@ class Recon(QMainWindow):
         dialog.fileSelected.connect(self._savePlot)
         dialog.open()
 
+    def _set_colors(self):
+        colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        for i in range(len(self.signals)):
+            self.signals[i].color = colors[i % len(colors)]
+
+    def _color(self):
+        sender: QClicableLabel = self.sender()
+        color = QColorDialog.getColor()
+        if color.isValid():
+            palette = sender.palette()
+            palette.setColor(QPalette.Base, color)
+            sender.setPalette(palette)
+            sender.setText(color.name())
+
     def _load(self, filename: str) -> None:
         if os.path.isfile(filename):
             self.filename = filename
@@ -356,7 +401,7 @@ class Recon(QMainWindow):
                     if len(line) and line != '\n':
                         data = line.split(',')
                         if len(data) >= 3:
-                            self.signals.append(Signal(data[2].strip()))
+                            self.signals.append(AnalogSignal(data[2].strip()))
 
                 # Update progress
                 self.progressUpdate(df.tell())
@@ -383,6 +428,7 @@ class Recon(QMainWindow):
                         self.progressUpdate(df.tell())
 
             self.progressEnd()
+            self._set_colors()
             self.rebuildSignalsDock()
 
     def _save(self, filename: str) -> None:
@@ -452,4 +498,5 @@ if __name__ == "__main__":
 
     window = Recon()
     window.show()
+
     sys.exit(app.exec_())
