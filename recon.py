@@ -4,48 +4,50 @@
 # All rights reserved
 
 
-from datetime import date
-import sys, os, numpy
+import sys
+import os
+import numpy
 from time import time
 from typing import List
-from PySide2.QtGui import QImage, QPalette, QImage
+from PySide2.QtGui import QPalette
 from PySide2.QtCore import QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop
-from PySide2.QtWidgets import QApplication, QCheckBox, QDoubleSpinBox, QLineEdit,  QMainWindow, QFileDialog, QAction, QDockWidget, QLabel, QProgressBar, QScrollArea, QSizePolicy, QGridLayout, QSpinBox, QTableWidget, QWidget, QSpacerItem
-from numpy.lib.shape_base import column_stack
+from PySide2.QtWidgets import QApplication, QCheckBox, QDoubleSpinBox, QAbstractItemView,\
+    QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction, QDockWidget,\
+    QLabel, QProgressBar, QScrollArea, QSizePolicy, QGridLayout, QSpinBox, QTableWidget, QWidget
 
 
 class Signal:
 
-    def __init__(self, name:str = '', unit:str = 'V', data:list = []) -> None:
-        self.selected:bool = False
-        self.name:str = name
-        self.unit:str = unit
-        self.smooth:int = 1
-        self.scale:float = 1.0
-        self.data:List[float] = data
-        self.maximum:float = float('-inf')
-        self.minimum:float = float('inf')
+    def __init__(self, name: str = '', unit: str = 'V', data: list = []) -> None:
+        self.selected: bool = False
+        self.name: str = name
+        self.unit: str = unit
+        self.smooth: int = 1
+        self.scale: float = 1.0
+        self.data: List[float] = data
+        self.maximum: float = float('-inf')
+        self.minimum: float = float('inf')
 
-    def smooth(self, n:int):
+    def smooth(self, n: int):
         window = numpy.ones(n)/n
         self.smooth = numpy.convolve(self.data, window, 'same')
 
-    def setName(self, name:str) -> None:
+    def setName(self, name: str) -> None:
         self.name = name
 
-    def setUnit(self, unit:str) -> None:
+    def setUnit(self, unit: str) -> None:
         self.unit = unit
 
-    def setSmooth(self, smooth:int) -> None:
+    def setSmooth(self, smooth: int) -> None:
         self.smooth = smooth
 
-    def setSelected(self, selected:bool) -> None:
+    def setSelected(self, selected: bool) -> None:
         self.selected = selected
 
     def setScale(self, scale: float) -> None:
         self.scale = scale
 
-    def append(self, value:float) -> None:
+    def append(self, value: float) -> None:
         self.data.append(value)
         if self.maximum < value:
             self.maximum = value
@@ -54,21 +56,21 @@ class Signal:
 
 
 class Recon(QMainWindow):
-    def __init__(self):
-        self.name:str = ''
-        self.filename:str = ''
-        self.plotName:str = None
-        self.times:list = []
-        self.signals:List[Signal] = []
-        self.progressBar:QProgressBar = None
-        self.dockSignals:QDockWidget = None
-        self.dockSignalsWidget:QTableWidget = None
+    def __init__(self) -> None:
+        self.name: str = ''
+        self.filename: str = ''
+        self.plotName: str = None
+        self.times: list = []
+        self.signals: List[Signal] = []
+        self.progressBar: QProgressBar = None
+        self.dockSignals: QDockWidget = None
+        self.dockSignalsWidget: QTableWidget = None
 
         super().__init__()
         self.initialize()
         self.restoreSession()
 
-    def initialize(self):
+    def initialize(self) -> None:
         self.setWindowTitle('Recon plotter')
         self.setMinimumSize(800, 200)
 
@@ -78,13 +80,13 @@ class Recon(QMainWindow):
         self.progressBar.setAlignment(Qt.AlignCenter)
         self.progressBar.hide()
 
-        image = QImage(800, 600, QImage.Format_ARGB32)
+#        image = QImage(800, 600, QImage.Format_ARGB32)
 
         imageLabel = QLabel(self)
         imageLabel.setBackgroundRole(QPalette.Base)
         imageLabel.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         imageLabel.setScaledContents(False)
-        #imageLabel.setPixmap(image.pi)
+        # imageLabel.setPixmap(image.pi)
 
         scrollArea = QScrollArea(self)
         scrollArea.setBackgroundRole(QPalette.Dark)
@@ -98,6 +100,7 @@ class Recon(QMainWindow):
         self.dockSignals.setObjectName('DockSignals')
         self.dockSignalsWidget = QTableWidget(0, 7)
         self.dockSignalsWidget.setObjectName('DockSignalsWidget')
+        self.dockSignalsWidget.setSelectionMode(QAbstractItemView.NoSelection)
         self.dockSignalsWidget.setHorizontalHeaderLabels([
             self.tr('Selected'),
             self.tr('Name'),
@@ -107,6 +110,9 @@ class Recon(QMainWindow):
             self.tr('Minimum'),
             self.tr('Maximum'),
         ])
+        header = self.dockSignalsWidget.horizontalHeader()
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setForegroundRole(QPalette.Window)
         dockSignalsLayout = QGridLayout(self.dockSignalsWidget)
         dockSignalsLayout.setObjectName('DockSignalsLayout')
         self.dockSignals.setWidget(self.dockSignalsWidget)
@@ -154,21 +160,21 @@ class Recon(QMainWindow):
 
         menuHelp.addAction(actionAboutQt)
 
-    def restoreSession(self):
+    def restoreSession(self) -> None:
         settings = QSettings()
         self.restoreGeometry(settings.value('geometry'))
         self.restoreState(settings.value('state'))
 
-    def saveSession(self):
+    def saveSession(self) -> None:
         settings = QSettings()
         settings.setValue('geometry', self.saveGeometry())
         settings.setValue('state', self.saveState())
 
-    def closeEvent(self, event):
+    def closeEvent(self, event) -> None:
         self.saveSession()
         event.accept()
 
-    def open(self):
+    def open(self) -> None:
         try:
             dialog = QFileDialog(self)
             dialog.setAcceptMode(QFileDialog.AcceptOpen)
@@ -180,7 +186,7 @@ class Recon(QMainWindow):
         except Exception as e:
             print(e)
 
-    def load(self, filename:str):
+    def load(self, filename: str) -> None:
         if os.path.isfile(filename):
             self.filename = filename
 
@@ -244,18 +250,23 @@ class Recon(QMainWindow):
             self.progressEnd()
             self.rebuildSignalsDock()
 
-    def rebuildSignalsDock(self):
+    def rebuildSignalsDock(self) -> None:
 
         self.dockSignalsWidget.clearContents()
         self.dockSignalsWidget.setRowCount(len(self.signals))
 
-
         for i in range(len(self.signals)):
 
             # Checkbox
-            checkBox = QCheckBox('', self.dockSignalsWidget)
+            widget = QWidget(self.dockSignalsWidget)
+            layout = QHBoxLayout(widget)
+            checkBox = QCheckBox('', widget)
+            checkBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            layout.addWidget(checkBox)
+            layout.setAlignment(Qt.AlignCenter)
+            layout.setMargin(0)
             checkBox.stateChanged.connect(self.signals[i].setSelected)
-            self.dockSignalsWidget.setCellWidget(i, 0, checkBox)
+            self.dockSignalsWidget.setCellWidget(i, 0, widget)
 
             # Signal name
             nameWidget = QLineEdit(self.dockSignalsWidget)
@@ -311,26 +322,26 @@ class Recon(QMainWindow):
             maxWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
             self.dockSignalsWidget.setCellWidget(i, 6, maxWidget)
 
-    def progressBegin(self, total:int) -> None:
+    def progressBegin(self, total: int) -> None:
         self.progressBar.setMaximum(total)
         self.progressBar.setValue(0)
         self.statusBar().addWidget(self.progressBar, 100)
         self.progressBar.show()
 
-    def progressUpdate(self, current:int) -> None:
+    def progressUpdate(self, current: int) -> None:
         self.progressBar.setValue(current)
         QCoreApplication.processEvents(QEventLoop.AllEvents)
 
     def progressEnd(self) -> None:
         self.statusBar().removeWidget(self.progressBar)
 
-    def save(self):
+    def save(self) -> None:
         if self.plotName is None:
             self.saveAs()
         else:
             self.savePlot(self.plotName)
 
-    def saveAs(self):
+    def saveAs(self) -> None:
         try:
             dialog = QFileDialog(self)
             dialog.setAcceptMode(QFileDialog.AcceptSave)
@@ -342,7 +353,7 @@ class Recon(QMainWindow):
         except Exception as e:
             print(e)
 
-    def savePlot(self, filename:str) -> None:
+    def savePlot(self, filename: str) -> None:
         pass
 
 
