@@ -96,19 +96,19 @@ class Recon(QMainWindow):
         self.setCentralWidget(scrollArea)
 
         # Signals Dock
-        self.dockSignals = QDockWidget('Signals', self)
+        self.dockSignals = QDockWidget(QCoreApplication.translate('SignalsDock', 'Signals'), self)
         self.dockSignals.setObjectName('DockSignals')
         self.dockSignalsWidget = QTableWidget(0, 7)
         self.dockSignalsWidget.setObjectName('DockSignalsWidget')
         self.dockSignalsWidget.setSelectionMode(QAbstractItemView.NoSelection)
         self.dockSignalsWidget.setHorizontalHeaderLabels([
-            self.tr('Selected'),
-            self.tr('Name'),
-            self.tr('Unit'),
-            self.tr('Smooth'),
-            self.tr('Scale'),
-            self.tr('Minimum'),
-            self.tr('Maximum'),
+            QCoreApplication.translate('SignalsDock', 'Selected'),
+            QCoreApplication.translate('SignalsDock', 'Name'),
+            QCoreApplication.translate('SignalsDock', 'Unit'),
+            QCoreApplication.translate('SignalsDock', 'Smooth'),
+            QCoreApplication.translate('SignalsDock', 'Scale'),
+            QCoreApplication.translate('SignalsDock', 'Minimum'),
+            QCoreApplication.translate('SignalsDock', 'Maximum'),
         ])
         header = self.dockSignalsWidget.horizontalHeader()
         header.setSectionResizeMode(1, QHeaderView.Stretch)
@@ -118,36 +118,36 @@ class Recon(QMainWindow):
         self.dockSignals.setWidget(self.dockSignalsWidget)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dockSignals)
 
-        actionExit = QAction(self.tr('&Exit'), self)
-        actionExit.setShortcut(self.tr('Ctrl+Q'))
-        actionExit.setStatusTip(self.tr('Exit application'))
+        actionExit = QAction(QCoreApplication.translate('Menu', '&Exit'), self)
+        actionExit.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Q'))
+        actionExit.setStatusTip(QCoreApplication.translate('Menu', 'Exit application'))
         actionExit.triggered.connect(self.close)
 
-        actionOpen = QAction(self.tr('&Open...'), self)
-        actionOpen.setShortcut(self.tr('Ctrl+O'))
-        actionOpen.setStatusTip(self.tr('Open the recon data in the text format'))
+        actionOpen = QAction(QCoreApplication.translate('Menu', '&Open...'), self)
+        actionOpen.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+O'))
+        actionOpen.setStatusTip(QCoreApplication.translate('Menu', 'Open the recon data in the text format'))
         actionOpen.triggered.connect(self.open)
 
-        actionSave = QAction(self.tr('&Save'), self)
-        actionSave.setShortcut(self.tr('Ctrl+S'))
-        actionSave.setStatusTip(self.tr('Save plot'))
+        actionSave = QAction(QCoreApplication.translate('Menu', '&Save'), self)
+        actionSave.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+S'))
+        actionSave.setStatusTip(QCoreApplication.translate('Menu', 'Save plot'))
         actionSave.triggered.connect(self.save)
 
-        actionSaveAs = QAction(self.tr('Save &as...'), self)
-        actionSaveAs.setShortcut(self.tr('Ctrl+Shift+S'))
-        actionSaveAs.setStatusTip(self.tr('Save plot as...'))
+        actionSaveAs = QAction(QCoreApplication.translate('Menu', 'Save &as...'), self)
+        actionSaveAs.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Shift+S'))
+        actionSaveAs.setStatusTip(QCoreApplication.translate('Menu', 'Save plot as...'))
         actionSaveAs.triggered.connect(self.saveAs)
 
         actionSignalsDock = self.dockSignals.toggleViewAction()
-        actionSignalsDock.setStatusTip(self.tr('Show/hide signals window'))
+        actionSignalsDock.setStatusTip(QCoreApplication.translate('Menu', 'Show/hide signals window'))
 
-        actionAboutQt = QAction(self.tr('About Qt...'), self)
+        actionAboutQt = QAction(QCoreApplication.translate('Menu', 'About Qt...'), self)
         actionAboutQt.triggered.connect(QApplication.aboutQt)
 
         menubar = self.menuBar()
-        menuFile = menubar.addMenu(self.tr('&File'))
-        menuView = menubar.addMenu(self.tr('&View'))
-        menuHelp = menubar.addMenu(self.tr('&Help'))
+        menuFile = menubar.addMenu(QCoreApplication.translate('Menu', '&File'))
+        menuView = menubar.addMenu(QCoreApplication.translate('Menu', '&View'))
+        menuHelp = menubar.addMenu(QCoreApplication.translate('Menu', '&Help'))
 
         menuFile.addAction(actionOpen)
         menuFile.addSeparator()
@@ -179,8 +179,8 @@ class Recon(QMainWindow):
             dialog = QFileDialog(self)
             dialog.setAcceptMode(QFileDialog.AcceptOpen)
             dialog.setDirectory(QSettings().value('default_path', QStandardPaths.DocumentsLocation))
-            dialog.setNameFilter(self.tr('Recon data files(*.txt)'))
-            dialog.setWindowTitle(self.tr('Open recon data file'))
+            dialog.setNameFilter(QCoreApplication.translate('FileDialog', 'Recon data files(*.txt)'))
+            dialog.setWindowTitle(QCoreApplication.translate('FileDialog', 'Open recon data file'))
             dialog.fileSelected.connect(self.load)
             dialog.open()
         except Exception as e:
@@ -194,7 +194,7 @@ class Recon(QMainWindow):
             QSettings().setValue('default_path', os.path.dirname(os.path.abspath(filename)))
 
             # Change window title
-            self.setWindowTitle(self.tr('Recon plotter - {0}').format(self.filename))
+            self.setWindowTitle(QCoreApplication.translate('FileDialog', 'Recon plotter - {0}').format(self.filename))
 
             # Reset signals
             self.times.clear()
@@ -346,8 +346,8 @@ class Recon(QMainWindow):
             dialog = QFileDialog(self)
             dialog.setAcceptMode(QFileDialog.AcceptSave)
             dialog.setDirectory(QSettings().value('default_path', '/home'))
-            dialog.setNameFilter(self.tr('PNG Image(*.png);;SVG Image(*.svg);;PDF Document(*.pdf)'))
-            dialog.setWindowTitle(self.tr('Save plot'))
+            dialog.setNameFilter(QCoreApplication.translate('FileDialog', 'PNG Image(*.png);;SVG Image(*.svg);;PDF Document(*.pdf)'))
+            dialog.setWindowTitle(QCoreApplication.translate('FileDialog', 'Save plot'))
             dialog.fileSelected.connect(self.savePlot)
             dialog.open()
         except Exception as e:
@@ -358,16 +358,17 @@ class Recon(QMainWindow):
 
 
 if __name__ == "__main__":
-    qtTranslator = QTranslator()
-    qtTranslator.load('_qt' + QLocale.system().name(), QLibraryInfo.location(QLibraryInfo.TranslationsPath))
 
-    myTranslator = QTranslator()
-    myTranslator.load(QLocale(), 'recon', '_', '.')
-
-    app = QApplication([])
+    app = QApplication(sys.argv)
     app.setOrganizationName('Oleksandr Kolodkin')
     app.setApplicationName('Recon Plotter')
+
+    qtTranslator = QTranslator(app)
+    qtTranslator.load('_qt' + QLocale.system().name(), QLibraryInfo.location(QLibraryInfo.TranslationsPath))
     app.installTranslator(qtTranslator)
+
+    myTranslator = QTranslator(app)
+    print(myTranslator.load(QLocale(), 'recon', '_', '.', '.qm'))
     app.installTranslator(myTranslator)
 
     window = Recon()
