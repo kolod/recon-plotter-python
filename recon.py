@@ -179,6 +179,12 @@ class Recon(QMainWindow):
         self.actionExit.triggered.connect(self.close)
 
         # Plot actions
+        self.actionBuildPlot = QAction(QCoreApplication.translate('Menu', '&Update'), self)
+        self.actionBuildPlot.setShortcut(QCoreApplication.translate('Menu', 'F5'))
+        self.actionBuildPlot.setStatusTip(QCoreApplication.translate('Menu', 'Update plot'))
+        self.actionBuildPlot.setDisabled(True)
+        self.actionBuildPlot.triggered.connect(self._update)
+
         self.actionSavePlot = QAction(QCoreApplication.translate('Menu', '&Save plot'), self)
         self.actionSavePlot.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Alt+S'))
         self.actionSavePlot.setStatusTip(QCoreApplication.translate('Menu', 'Save plot'))
@@ -207,6 +213,8 @@ class Recon(QMainWindow):
         menuFile.addAction(self.actionExit)
 
         menuPlot = menubar.addMenu(QCoreApplication.translate('Menu', '&Plot'))
+        menuPlot.addAction(self.actionBuildPlot)
+        menuPlot.addSeparator()
         menuPlot.addActions([self.actionSavePlot, self.actionSavePlotAs])
 
         menuView = menubar.addMenu(QCoreApplication.translate('Menu', '&View'))
@@ -443,6 +451,7 @@ class Recon(QMainWindow):
             self._set_colors()
             self.actionSave.setEnabled(True)
             self.actionSaveAs.setEnabled(True)
+            self.actionBuildPlot.setEnabled(True)
             self.rebuildSignalsDock()
 
     def _save(self, filename: str) -> None:
@@ -490,6 +499,10 @@ class Recon(QMainWindow):
             # Change window title
             self.dataFileName = filename
             self.setWindowTitle(QCoreApplication.translate('Main', 'Recon plotter - {0}').format(self.filename))
+
+    def _update(self):
+        self.actionSavePlot.setEnabled(True)
+        self.actionSavePlotAs.setEnabled(True)
 
     def _savePlot(self, filename: str) -> None:
         pass
