@@ -10,8 +10,8 @@ import numpy
 from time import time
 from typing import List
 import matplotlib.pyplot as plt
-from PySide2.QtGui import QColor, QIntValidator, QPalette, QMouseEvent
-from PySide2.QtCore import Signal, QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop
+from PySide2.QtGui import QColor, QIntValidator, QPalette, QMouseEvent, QBrush
+from PySide2.QtCore import QObject, Signal, QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot
 from PySide2.QtWidgets import QApplication, QCheckBox, QAbstractItemView,\
     QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction, QDockWidget,\
     QLabel, QProgressBar, QScrollArea, QSizePolicy, QGridLayout, QTableWidget, QWidget,\
@@ -30,9 +30,10 @@ class QClicableLabel(QLabel):
             self.clicked.emit()
 
 
-class AnalogSignal(object):
+class AnalogSignal(QObject):
 
     def __init__(self, name: str = '', unit: str = 'V', data: List[float] = None) -> None:
+        super(AnalogSignal, self).__init__()
         self.selected: bool = False
         self.name: str = name
         self.unit: str = unit
@@ -71,6 +72,16 @@ class AnalogSignal(object):
             self.maximum = value
         if self.minimum > value:
             self.minimum = value
+
+    def _color(self):
+        sender: QClicableLabel = self.sender()
+        color = QColorDialog.getColor()
+        if color.isValid():
+            palette = sender.palette()
+            palette.setColor(QPalette.Base, color)
+            sender.setPalette(palette)
+            sender.setText(color.name())
+            self.color = color.name()
 
 
 class Recon(QMainWindow):
@@ -117,6 +128,10 @@ class Recon(QMainWindow):
         self.dockSignals = QDockWidget(QCoreApplication.translate('SignalsDock', 'Signals'), self)
         self.dockSignals.setObjectName('DockSignals')
         self.dockSignalsWidget = QTableWidget(0, 8)
+        dockSignalsWidgetPalette = self.dockSignalsWidget.palette()
+        dockSignalsWidgetPalette.setBrush(QPalette.Highlight, QBrush(Qt.white))
+        dockSignalsWidgetPalette.setBrush(QPalette.HighlightedText, QBrush(Qt.black))
+        self.dockSignalsWidget.setPalette(dockSignalsWidgetPalette)
         self.dockSignalsWidget.setAutoFillBackground(True)
         self.dockSignalsWidget.setObjectName('DockSignalsWidget')
         self.dockSignalsWidget.setSelectionMode(QAbstractItemView.NoSelection)
@@ -216,7 +231,7 @@ class Recon(QMainWindow):
         for i in range(len(self.signals)):
 
             # Checkbox
-            widget = QWidget(self.dockSignalsWidget)
+            widget = QLabel('', self.dockSignalsWidget)
             layout = QHBoxLayout(widget)
             checkBox = QCheckBox('', widget)
             checkBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -291,7 +306,7 @@ class Recon(QMainWindow):
             palette = colorWidget.palette()
             palette.setColor(QPalette.Base, color)
             colorWidget.setPalette(palette)
-            colorWidget.clicked.connect(self._color)
+            colorWidget.clicked.connect(self.signals[i]._color)
             self.dockSignalsWidget.setCellWidget(i, 7, colorWidget)
 
     def progressBegin(self, total: int) -> None:
@@ -356,15 +371,6 @@ class Recon(QMainWindow):
         colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
         for i in range(len(self.signals)):
             self.signals[i].color = colors[i % len(colors)]
-
-    def _color(self):
-        sender: QClicableLabel = self.sender()
-        color = QColorDialog.getColor()
-        if color.isValid():
-            palette = sender.palette()
-            palette.setColor(QPalette.Base, color)
-            sender.setPalette(palette)
-            sender.setText(color.name())
 
     def _load(self, filename: str) -> None:
         if os.path.isfile(filename):
