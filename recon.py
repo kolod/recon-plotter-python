@@ -11,7 +11,7 @@ from time import time
 from typing import List
 import matplotlib.pyplot as plt
 from PySide2.QtGui import QColor, QIntValidator, QPalette, QMouseEvent, QBrush
-from PySide2.QtCore import QObject, Signal, QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot
+from PySide2.QtCore import QObject, Signal, QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop
 from PySide2.QtWidgets import QApplication, QCheckBox, QAbstractItemView,\
     QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction, QDockWidget,\
     QLabel, QProgressBar, QScrollArea, QSizePolicy, QGridLayout, QTableWidget, QWidget,\
@@ -109,20 +109,22 @@ class Recon(QMainWindow):
         self.progressBar.setAlignment(Qt.AlignCenter)
         self.progressBar.hide()
 
+        # Add plot display
+        centralwidget = QWidget(self)
+        gridLayout = QGridLayout(centralwidget)
+        scrollArea = QScrollArea(centralwidget)
+        scrollArea.setWidgetResizable(True)
+        scrollAreaWidgetContents = QWidget()
+        imageLabel = QLabel(scrollAreaWidgetContents)
+        imageLabel.setScaledContents(False)
+        scrollArea.setWidget(scrollAreaWidgetContents)
+        gridLayout.addWidget(scrollArea, 0, 0, 1, 1)
+
 #        image = QImage(800, 600, QImage.Format_ARGB32)
 
-        imageLabel = QLabel(self)
-        imageLabel.setBackgroundRole(QPalette.Base)
-        imageLabel.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
-        imageLabel.setScaledContents(False)
         # imageLabel.setPixmap(image.pi)
 
-        scrollArea = QScrollArea(self)
-        scrollArea.setBackgroundRole(QPalette.Dark)
-        scrollArea.setWidget(imageLabel)
-        scrollArea.setVisible(False)
-
-        self.setCentralWidget(scrollArea)
+        self.setCentralWidget(centralwidget)
 
         # Signals Dock
         self.dockSignals = QDockWidget(QCoreApplication.translate('SignalsDock', 'Signals'), self)
@@ -154,60 +156,64 @@ class Recon(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dockSignals)
 
         # File actions
-        actionOpen = QAction(QCoreApplication.translate('Menu', '&Open...'), self)
-        actionOpen.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+O'))
-        actionOpen.setStatusTip(QCoreApplication.translate('Menu', 'Open the recon data in the text format'))
-        actionOpen.triggered.connect(self.openData)
+        self.actionOpen = QAction(QCoreApplication.translate('Menu', '&Open...'), self)
+        self.actionOpen.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+O'))
+        self.actionOpen.setStatusTip(QCoreApplication.translate('Menu', 'Open the recon data in the text format'))
+        self.actionOpen.triggered.connect(self.openData)
 
-        actionSave = QAction(QCoreApplication.translate('Menu', '&Save'), self)
-        actionSave.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+S'))
-        actionSave.setStatusTip(QCoreApplication.translate('Menu', 'Save the recon data in the text format'))
-        actionSave.triggered.connect(self.saveData)
+        self.actionSave = QAction(QCoreApplication.translate('Menu', '&Save'), self)
+        self.actionSave.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+S'))
+        self.actionSave.setStatusTip(QCoreApplication.translate('Menu', 'Save the recon data in the text format'))
+        self.actionSave.setDisabled(True)
+        self.actionSave.triggered.connect(self.saveData)
 
-        actionSaveAs = QAction(QCoreApplication.translate('Menu', 'Save &as...'), self)
-        actionSaveAs.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Shift+S'))
-        actionSaveAs.setStatusTip(QCoreApplication.translate('Menu', 'Save the recon data in the text format as...'))
-        actionSaveAs.triggered.connect(self.saveDataAs)
+        self.actionSaveAs = QAction(QCoreApplication.translate('Menu', 'Save &as...'), self)
+        self.actionSaveAs.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Shift+S'))
+        self.actionSaveAs.setDisabled(True)
+        self.actionSaveAs.setStatusTip(QCoreApplication.translate('Menu', 'Save the recon data in the text format as...'))
+        self.actionSaveAs.triggered.connect(self.saveDataAs)
 
-        actionExit = QAction(QCoreApplication.translate('Menu', '&Exit'), self)
-        actionExit.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Q'))
-        actionExit.setStatusTip(QCoreApplication.translate('Menu', 'Exit application'))
-        actionExit.triggered.connect(self.close)
+        self.actionExit = QAction(QCoreApplication.translate('Menu', '&Exit'), self)
+        self.actionExit.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Q'))
+        self.actionExit.setStatusTip(QCoreApplication.translate('Menu', 'Exit application'))
+        self.actionExit.triggered.connect(self.close)
 
         # Plot actions
-        actionSavePlot = QAction(QCoreApplication.translate('Menu', '&Save plot'), self)
-        actionSavePlot.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Alt+S'))
-        actionSavePlot.setStatusTip(QCoreApplication.translate('Menu', 'Save plot'))
-        actionSavePlot.triggered.connect(self.savePlot)
+        self.actionSavePlot = QAction(QCoreApplication.translate('Menu', '&Save plot'), self)
+        self.actionSavePlot.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Alt+S'))
+        self.actionSavePlot.setStatusTip(QCoreApplication.translate('Menu', 'Save plot'))
+        self.actionSavePlot.setDisabled(True)
+        self.actionSavePlot.triggered.connect(self.savePlot)
 
-        actionSavePlotAs = QAction(QCoreApplication.translate('Menu', 'Save plot &as...'), self)
-        actionSavePlotAs.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Alt+Shift+S'))
-        actionSavePlotAs.setStatusTip(QCoreApplication.translate('Menu', 'Save plot as...'))
-        actionSavePlotAs.triggered.connect(self.savePlotAs)
+        self.actionSavePlotAs = QAction(QCoreApplication.translate('Menu', 'Save plot &as...'), self)
+        self.actionSavePlotAs.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Alt+Shift+S'))
+        self.actionSavePlotAs.setStatusTip(QCoreApplication.translate('Menu', 'Save plot as...'))
+        self.actionSavePlotAs.setDisabled(True)
+        self.actionSavePlotAs.triggered.connect(self.savePlotAs)
 
         # Viev actions
-        actionSignalsDock = self.dockSignals.toggleViewAction()
-        actionSignalsDock.setStatusTip(QCoreApplication.translate('Menu', 'Show/hide signals window'))
+        self.actionSignalsDock = self.dockSignals.toggleViewAction()
+        self.actionSignalsDock.setStatusTip(QCoreApplication.translate('Menu', 'Show/hide signals window'))
 
         # Help actions
-        actionAboutQt = QAction(QCoreApplication.translate('Menu', 'About Qt...'), self)
-        actionAboutQt.triggered.connect(QApplication.aboutQt)
+        self.actionAboutQt = QAction(QCoreApplication.translate('Menu', 'About Qt...'), self)
+        self.actionAboutQt.triggered.connect(QApplication.aboutQt)
 
         menubar = self.menuBar()
+
         menuFile = menubar.addMenu(QCoreApplication.translate('Menu', '&File'))
-        menuPlot = menubar.addMenu(QCoreApplication.translate('Menu', '&Plot'))
-        menuView = menubar.addMenu(QCoreApplication.translate('Menu', '&View'))
-        menuHelp = menubar.addMenu(QCoreApplication.translate('Menu', '&Help'))
-
-        menuFile.addActions([actionOpen, actionSave, actionSaveAs])
+        menuFile.addActions([self.actionOpen, self.actionSave, self.actionSaveAs])
         menuFile.addSeparator()
-        menuFile.addAction(actionExit)
+        menuFile.addAction(self.actionExit)
 
-        menuPlot.addActions([actionSavePlot, actionSavePlotAs])
+        menuPlot = menubar.addMenu(QCoreApplication.translate('Menu', '&Plot'))
+        menuPlot.addActions([self.actionSavePlot, self.actionSavePlotAs])
 
-        menuView.addAction(actionSignalsDock)
+        menuView = menubar.addMenu(QCoreApplication.translate('Menu', '&View'))
+        menuView.addAction(self.actionSignalsDock)
 
-        menuHelp.addAction(actionAboutQt)
+        menuHelp = menubar.addMenu(QCoreApplication.translate('Menu', '&Help'))
+        menuHelp.addAction(self.actionAboutQt)
 
     def restoreSession(self) -> None:
         settings = QSettings()
@@ -435,6 +441,8 @@ class Recon(QMainWindow):
 
             self.progressEnd()
             self._set_colors()
+            self.actionSave.setEnabled(True)
+            self.actionSaveAs.setEnabled(True)
             self.rebuildSignalsDock()
 
     def _save(self, filename: str) -> None:
