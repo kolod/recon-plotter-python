@@ -8,26 +8,37 @@ import sys
 import os
 import numpy
 from time import time
-from typing import List
+from typing import List, Optional
 import matplotlib.pyplot as plt
-from PySide2.QtGui import QColor, QIntValidator, QPalette, QMouseEvent, QBrush
-from PySide2.QtCore import QObject, Signal, QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop
-from PySide2.QtWidgets import QApplication, QCheckBox, QAbstractItemView,\
+from PySide2.QtGui import QColor, QValidator, QDoubleValidator, QIntValidator, QPalette, QMouseEvent, QBrush, QPixmap
+from PySide2.QtCore import QObject, Signal, QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, QTemporaryFile
+from PySide2.QtWidgets import QApplication, QCheckBox, QAbstractItemView, QFormLayout,\
     QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction, QDockWidget,\
     QLabel, QProgressBar, QScrollArea, QSizePolicy, QGridLayout, QTableWidget, QWidget,\
     QStyleFactory, QColorDialog
 
 
-class QClicableLabel(QLabel):
+class ClicableLabel(QLabel):
     clicked = Signal()
 
     def __init__(self, text: str, parent: QWidget) -> None:
-        super(QClicableLabel, self).__init__(text, parent)
+        super(ClicableLabel, self).__init__(text, parent)
         self.mousePressEvent = self.on_mousePressEvent
 
     def on_mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.LeftButton:
             self.clicked.emit()
+
+
+class DoubleValidator(QDoubleValidator):
+
+    def __init__(self, parent: Optional[QObject] = None) -> None:
+        super(DoubleValidator, self).__init__(parent=parent)
+
+    def validate(self, string: str, pos: int) -> QValidator.State:
+        string = string.replace('.', QLocale().decimalPoint())
+        string = string.replace(',', QLocale().decimalPoint())
+        return super(DoubleValidator, self).validate(string, pos)
 
 
 class AnalogSignal(QObject):
@@ -44,9 +55,10 @@ class AnalogSignal(QObject):
         self.minimum: float = float('inf')
         self.color: str = 'green'
 
-    def smooth(self, n: int):
-        window = numpy.ones(n)/n
-        self.smooth = numpy.convolve(self.data, window, 'same')
+    def smoothed(self):
+        window = numpy.ones(self.smooth)/self.smooth
+        smooth = numpy.convolve(self.data, window, 'same')
+        return smooth
 
     def setName(self, name: str) -> None:
         self.name = name
@@ -74,7 +86,7 @@ class AnalogSignal(QObject):
             self.minimum = value
 
     def _color(self):
-        sender: QClicableLabel = self.sender()
+        sender: ClicableLabel = self.sender()
         color = QColorDialog.getColor()
         if color.isValid():
             palette = sender.palette()
@@ -94,10 +106,68 @@ class Recon(QMainWindow):
         self.progressBar: QProgressBar = None
         self.dockSignals: QDockWidget = None
         self.dockSignalsWidget: QTableWidget = None
+        self.title: str = ''
+        self.axisX: str = ''
+        self.axisY: str = ''
+        self.min_x: float = None
+        self.min_y: float = None
+        self.max_x: float = None
+        self.max_y: float = None
 
         super().__init__()
         self.initialize()
         self.restoreSession()
+
+    def setTitle(self, title: str) -> None:
+        self.title = title
+
+    def setAxisX(self, axisX: str) -> None:
+        self.axisX = axisX
+
+    def setAxisY(self, axisY: str) -> None:
+        self.axisY = axisY
+
+    def setMinX(self, value: float) -> None:
+        self.min_x = value
+
+    def setMinY(self, value: float) -> None:
+        self.min_y = value
+
+    def setMaxX(self, value: float) -> None:
+        self.max_x = value
+
+    def setMaxY(self, value: float) -> None:
+        self.max_y = value
+
+    def autoRange(self):
+        if len(self.times) and len(self.signals):
+
+            # X range
+            self.min_x = 0
+            self.max_x = self.times[-1]
+
+            # Y range
+            self.min_y = float('inf')
+            self.max_y = float('-inf')
+            for signal in self.signals:
+                self.min_y = min(self.min_y, signal.minimum * signal.scale)
+                self.max_y = max(self.max_y, signal.maximum * signal.scale)
+
+            # Update validators
+            self.validatorMinX.setBottom(self.min_x)
+            self.validatorMinX.setTop(self.max_x)
+            self.validatorMaxX.setBottom(self.min_x)
+            self.validatorMaxX.setTop(self.max_x)
+            self.validatorMinY.setBottom(self.min_y)
+            self.validatorMinY.setTop(self.max_y)
+            self.validatorMaxY.setBottom(self.min_y)
+            self.validatorMaxY.setTop(self.max_y)
+
+            # Update range
+            self.widgetMinX.setText(str(self.min_x))
+            self.widgetMinY.setText(str(self.min_y))
+            self.widgetMaxX.setText(str(self.max_x))
+            self.widgetMaxY.setText(str(self.max_y))
 
     def initialize(self) -> None:
         self.setWindowTitle('Recon plotter')
@@ -115,16 +185,84 @@ class Recon(QMainWindow):
         scrollArea = QScrollArea(centralwidget)
         scrollArea.setWidgetResizable(True)
         scrollAreaWidgetContents = QWidget()
-        imageLabel = QLabel(scrollAreaWidgetContents)
-        imageLabel.setScaledContents(False)
+        self.imageLabel = QLabel(scrollAreaWidgetContents)
+        self.imageLabel.setScaledContents(False)
         scrollArea.setWidget(scrollAreaWidgetContents)
         gridLayout.addWidget(scrollArea, 0, 0, 1, 1)
 
-#        image = QImage(800, 600, QImage.Format_ARGB32)
-
-        # imageLabel.setPixmap(image.pi)
-
         self.setCentralWidget(centralwidget)
+
+        # Plot Settings Dock
+        self.plotSettingsDock = QDockWidget(QCoreApplication.translate('PlotSettingsDock', 'Plot Settings'), self)
+        self.plotSettingsDock.setObjectName('PlotSettingsDock')
+        self.plotSettingsWidget = QWidget()
+        self.plotSettingsLayout = QFormLayout(self.plotSettingsWidget)
+        self.plotSettingsLayout.setObjectName('PlotSettingsLayout')
+        self.plotSettingsLayout.setLabelAlignment(Qt.AlignRight)
+
+        # Title
+        self.labelTitle = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Title:'), self.plotSettingsWidget)
+        self.widgetTitle = QLineEdit(self.plotSettingsWidget)
+        self.widgetTitle.setAlignment(Qt.AlignCenter)
+        self.widgetTitle.textChanged.connect(self.setTitle)
+        self.plotSettingsLayout.addRow(self.labelTitle, self.widgetTitle)
+
+        # X Axis label
+        self.labelAxisX = QLabel(QCoreApplication.translate('PlotSettingsDock', 'X axis label:'), self.plotSettingsWidget)
+        self.widgetAxisX = QLineEdit(self.plotSettingsWidget)
+        self.widgetAxisX.setAlignment(Qt.AlignCenter)
+        self.widgetAxisX.textChanged.connect(self.setAxisX)
+        self.plotSettingsLayout.addRow(self.labelAxisX, self.widgetAxisX)
+
+        # Y Axis label
+        self.labelAxisY = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Y axis label:'), self.plotSettingsWidget)
+        self.widgetAxisY = QLineEdit(self.plotSettingsWidget)
+        self.widgetAxisY.setAlignment(Qt.AlignCenter)
+        self.widgetAxisY.textChanged.connect(self.setAxisY)
+        self.plotSettingsLayout.addRow(self.labelAxisY, self.widgetAxisY)
+
+        # Minimum X
+        self.labelMinX = QLabel(QCoreApplication.translate('PlotSettingsDock', 'X from:'), self.plotSettingsWidget)
+        self.widgetMinX = QLineEdit(self.plotSettingsWidget)
+        self.validatorMinX = DoubleValidator(self.widgetMinX)
+        self.validatorMinX.setDecimals(3)
+        self.widgetMinX.setValidator(self.validatorMinX)
+        self.widgetMinX.setAlignment(Qt.AlignCenter)
+        self.widgetMinX.textChanged.connect(self.setMinX)
+        self.plotSettingsLayout.addRow(self.labelMinX, self.widgetMinX)
+
+        # Maximum X
+        self.labelMaxX = QLabel(QCoreApplication.translate('PlotSettingsDock', 'X to:'), self.plotSettingsWidget)
+        self.widgetMaxX = QLineEdit(self.plotSettingsWidget)
+        self.validatorMaxX = DoubleValidator(self.widgetMinX)
+        self.validatorMaxX.setDecimals(3)
+        self.widgetMaxX.setValidator(self.validatorMaxX)
+        self.widgetMaxX.setAlignment(Qt.AlignCenter)
+        self.widgetMaxX.textChanged.connect(self.setMaxX)
+        self.plotSettingsLayout.addRow(self.labelMaxX, self.widgetMaxX)
+
+        # Minimum Y
+        self.labelMinY = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Y from:'), self.plotSettingsWidget)
+        self.widgetMinY = QLineEdit(self.plotSettingsWidget)
+        self.validatorMinY = DoubleValidator(self.widgetMinY)
+        self.validatorMinY.setDecimals(3)
+        self.widgetMinY.setValidator(self.validatorMinY)
+        self.widgetMinY.setAlignment(Qt.AlignCenter)
+        self.widgetMinY.textChanged.connect(self.setMinY)
+        self.plotSettingsLayout.addRow(self.labelMinY, self.widgetMinY)
+
+        # Maximum Y
+        self.labelMaxY = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Y to:'), self.plotSettingsWidget)
+        self.widgetMaxY = QLineEdit(self.plotSettingsWidget)
+        self.validatorMaxY = DoubleValidator(self.widgetMinY)
+        self.validatorMaxY.setDecimals(3)
+        self.widgetMaxY.setValidator(self.validatorMaxY)
+        self.widgetMaxY.setAlignment(Qt.AlignCenter)
+        self.widgetMaxY.textChanged.connect(self.setMaxY)
+        self.plotSettingsLayout.addRow(self.labelMaxY, self.widgetMaxY)
+
+        self.plotSettingsDock.setWidget(self.plotSettingsWidget)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.plotSettingsDock)
 
         # Signals Dock
         self.dockSignals = QDockWidget(QCoreApplication.translate('SignalsDock', 'Signals'), self)
@@ -313,7 +451,7 @@ class Recon(QMainWindow):
 
             # Color
             color = QColor(self.signals[i].color)
-            colorWidget = QClicableLabel(color.name(), self.dockSignalsWidget)
+            colorWidget = ClicableLabel(color.name(), self.dockSignalsWidget)
             colorWidget.setAlignment(Qt.AlignCenter)
             colorWidget.setAutoFillBackground(True)
             colorWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -452,6 +590,7 @@ class Recon(QMainWindow):
             self.actionSave.setEnabled(True)
             self.actionSaveAs.setEnabled(True)
             self.actionBuildPlot.setEnabled(True)
+            self.autoRange()
             self.rebuildSignalsDock()
 
     def _save(self, filename: str) -> None:
@@ -501,6 +640,35 @@ class Recon(QMainWindow):
             self.setWindowTitle(QCoreApplication.translate('Main', 'Recon plotter - {0}').format(self.filename))
 
     def _update(self):
+        fig, ax = plt.subplots()
+
+        temp: QTemporaryFile = QTemporaryFile()
+        temp.open()
+        temp.close()
+
+        print(temp.fileName())
+
+        for signal in self.signals:
+            if signal.selected:
+                ax.plot(signal.smoothed(), self.times, label=signal.name, linewidth=0.25)
+
+        plt.minorticks_on()
+        plt.tight_layout()
+
+#        ax.axis(axis)
+        ax.legend(loc='best')
+        ax.grid(which='minor', linestyle=':')
+        ax.grid(which='major', linestyle='-')
+
+        fig.set_size_inches(11.0, 7.5)
+        fig.tight_layout()
+
+        plt.savefig(temp.fileName(), format='svg')
+        plt.close()
+
+        pixmap = QPixmap(temp.fileName())
+        self.imageLabel.setPixmap(pixmap)
+
         self.actionSavePlot.setEnabled(True)
         self.actionSavePlotAs.setEnabled(True)
 
