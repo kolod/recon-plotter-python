@@ -7,11 +7,12 @@
 import sys
 import os
 import numpy
+import tempfile
 from time import time
 from typing import List, Optional
 import matplotlib.pyplot as plt
 from PySide2.QtGui import QColor, QValidator, QDoubleValidator, QIntValidator, QPalette, QMouseEvent, QBrush, QPixmap
-from PySide2.QtCore import QObject, Signal, QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, QTemporaryFile
+from PySide2.QtCore import QObject, Signal, QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot
 from PySide2.QtWidgets import QApplication, QCheckBox, QAbstractItemView, QFormLayout,\
     QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction, QDockWidget,\
     QLabel, QProgressBar, QScrollArea, QSizePolicy, QGridLayout, QTableWidget, QWidget,\
@@ -41,7 +42,38 @@ class DoubleValidator(QDoubleValidator):
         return super(DoubleValidator, self).validate(string, pos)
 
 
+class DoubleLineEdit(QLineEdit):
+    valueChanged = Signal(float)
+
+    def __init__(self, parent: Optional[QWidget]) -> None:
+        super().__init__(parent=parent)
+        self.setAlignment(Qt.AlignCenter)
+        self.setValidator(DoubleValidator())
+        self.textChanged.connect(self.onTextChanged)
+
+    def onTextChanged(self, text: str) -> None:
+        value = float(text.replace(QLocale().decimalPoint(), '.'))
+        self.valueChanged.emit(value)
+
+    @Slot(int)
+    def setDecimals(self, decimals: int) -> None:
+        validator: DoubleValidator = self.validator()
+        validator.setDecimals(decimals)
+
+    @Slot(float, float)
+    def setRange(self, bottom: float, top: float) -> None:
+        validator: DoubleValidator = self.validator()
+        validator.setBottom(bottom)
+        validator.setTop(top)
+
+    @Slot(float)
+    def setValue(self, value: float) -> None:
+        self.setText(f'{value:g}')
+
+
 class AnalogSignal(QObject):
+    minimumChanged = Signal(float)
+    maximumChanged = Signal(float)
 
     def __init__(self, name: str = '', unit: str = 'V', data: List[float] = None) -> None:
         super(AnalogSignal, self).__init__()
@@ -51,14 +83,24 @@ class AnalogSignal(QObject):
         self.smooth: int = 1
         self.scale: float = 1.0
         self.data: List[float] = data or []
+        self.smoothedData: List[float] = None
         self.maximum: float = float('-inf')
         self.minimum: float = float('inf')
         self.color: str = 'green'
 
-    def smoothed(self):
-        window = numpy.ones(self.smooth)/self.smooth
-        smooth = numpy.convolve(self.data, window, 'same')
-        return smooth
+    def update(self):
+        if self.smooth > 1:
+            window = numpy.ones(self.smooth)/self.smooth
+            self.smoothedData = numpy.convolve(self.data, window, 'same')
+            self.maximum = float('-inf')
+            self.minimum = float('inf')
+            for value in self.smoothedData:
+                v = value * self.scale
+                self.maximum = max(self.maximum, v)
+                self.minimum = min(self.minimum, v)
+
+        self.minimumChanged.emit(self.minimum)
+        self.maximumChanged.emit(self.maximum)
 
     def setName(self, name: str) -> None:
         self.name = name
@@ -67,13 +109,13 @@ class AnalogSignal(QObject):
         self.unit = unit
 
     def setSmooth(self, smooth: int) -> None:
-        self.smooth = smooth
+        self.smooth = int(smooth)
 
     def setSelected(self, selected: bool) -> None:
-        self.selected = selected
+        self.selected = bool(selected)
 
     def setScale(self, scale: float) -> None:
-        self.scale = scale
+        self.scale = float(scale)
 
     def setColor(self, color: str) -> None:
         self.color = color
@@ -118,27 +160,42 @@ class Recon(QMainWindow):
         self.initialize()
         self.restoreSession()
 
+    @Slot(str)
     def setTitle(self, title: str) -> None:
         self.title = title
 
+    @Slot(str)
     def setAxisX(self, axisX: str) -> None:
         self.axisX = axisX
 
+    @Slot(str)
     def setAxisY(self, axisY: str) -> None:
         self.axisY = axisY
 
+    @Slot(float)
     def setMinX(self, value: float) -> None:
         self.min_x = value
 
+    @Slot(float)
     def setMinY(self, value: float) -> None:
         self.min_y = value
 
+    @Slot(float)
     def setMaxX(self, value: float) -> None:
         self.max_x = value
 
+    @Slot(float)
     def setMaxY(self, value: float) -> None:
         self.max_y = value
 
+    def isSignalsNotSelected(self) -> bool:
+        for signal in self.signals:
+            if signal.selected:
+                return False
+        return True
+
+    @Slot()
+    @Slot(bool)
     def autoRange(self):
         if len(self.times) and len(self.signals):
 
@@ -149,25 +206,26 @@ class Recon(QMainWindow):
             # Y range
             self.min_y = float('inf')
             self.max_y = float('-inf')
+
             for signal in self.signals:
-                self.min_y = min(self.min_y, signal.minimum * signal.scale)
-                self.max_y = max(self.max_y, signal.maximum * signal.scale)
+                if self.isSignalsNotSelected() or signal.selected:
+                    signal.update()
+                    self.min_y = min(self.min_y, signal.minimum * signal.scale)
+                    self.max_y = max(self.max_y, signal.maximum * signal.scale)
+
+            # TODO: Round values to more beautiful
 
             # Update validators
-            self.validatorMinX.setBottom(self.min_x)
-            self.validatorMinX.setTop(self.max_x)
-            self.validatorMaxX.setBottom(self.min_x)
-            self.validatorMaxX.setTop(self.max_x)
-            self.validatorMinY.setBottom(self.min_y)
-            self.validatorMinY.setTop(self.max_y)
-            self.validatorMaxY.setBottom(self.min_y)
-            self.validatorMaxY.setTop(self.max_y)
+            self.widgetMinX.setRange(self.min_x, self.max_x)
+            self.widgetMaxX.setRange(self.min_x, self.max_x)
+            self.widgetMinY.setRange(self.min_y, self.max_y)
+            self.widgetMaxY.setRange(self.min_y, self.max_y)
 
             # Update range
-            self.widgetMinX.setText(str(self.min_x))
-            self.widgetMinY.setText(str(self.min_y))
-            self.widgetMaxX.setText(str(self.max_x))
-            self.widgetMaxY.setText(str(self.max_y))
+            self.widgetMinX.setValue(self.min_x)
+            self.widgetMaxX.setValue(self.max_x)
+            self.widgetMinY.setValue(self.min_y)
+            self.widgetMaxY.setValue(self.max_y)
 
     def initialize(self) -> None:
         self.setWindowTitle('Recon plotter')
@@ -223,42 +281,30 @@ class Recon(QMainWindow):
 
         # Minimum X
         self.labelMinX = QLabel(QCoreApplication.translate('PlotSettingsDock', 'X from:'), self.plotSettingsWidget)
-        self.widgetMinX = QLineEdit(self.plotSettingsWidget)
-        self.validatorMinX = DoubleValidator(self.widgetMinX)
-        self.validatorMinX.setDecimals(3)
-        self.widgetMinX.setValidator(self.validatorMinX)
-        self.widgetMinX.setAlignment(Qt.AlignCenter)
-        self.widgetMinX.textChanged.connect(self.setMinX)
+        self.widgetMinX = DoubleLineEdit(self.plotSettingsWidget)
+        self.widgetMinX.setDecimals(3)
+        self.widgetMinX.valueChanged.connect(self.setMinX)
         self.plotSettingsLayout.addRow(self.labelMinX, self.widgetMinX)
 
         # Maximum X
         self.labelMaxX = QLabel(QCoreApplication.translate('PlotSettingsDock', 'X to:'), self.plotSettingsWidget)
-        self.widgetMaxX = QLineEdit(self.plotSettingsWidget)
-        self.validatorMaxX = DoubleValidator(self.widgetMinX)
-        self.validatorMaxX.setDecimals(3)
-        self.widgetMaxX.setValidator(self.validatorMaxX)
-        self.widgetMaxX.setAlignment(Qt.AlignCenter)
-        self.widgetMaxX.textChanged.connect(self.setMaxX)
+        self.widgetMaxX = DoubleLineEdit(self.plotSettingsWidget)
+        self.widgetMaxX.setDecimals(3)
+        self.widgetMaxX.valueChanged.connect(self.setMaxX)
         self.plotSettingsLayout.addRow(self.labelMaxX, self.widgetMaxX)
 
         # Minimum Y
         self.labelMinY = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Y from:'), self.plotSettingsWidget)
-        self.widgetMinY = QLineEdit(self.plotSettingsWidget)
-        self.validatorMinY = DoubleValidator(self.widgetMinY)
-        self.validatorMinY.setDecimals(3)
-        self.widgetMinY.setValidator(self.validatorMinY)
-        self.widgetMinY.setAlignment(Qt.AlignCenter)
-        self.widgetMinY.textChanged.connect(self.setMinY)
+        self.widgetMinY = DoubleLineEdit(self.plotSettingsWidget)
+        self.widgetMinY.setDecimals(3)
+        self.widgetMinY.valueChanged.connect(self.setMinY)
         self.plotSettingsLayout.addRow(self.labelMinY, self.widgetMinY)
 
         # Maximum Y
         self.labelMaxY = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Y to:'), self.plotSettingsWidget)
-        self.widgetMaxY = QLineEdit(self.plotSettingsWidget)
-        self.validatorMaxY = DoubleValidator(self.widgetMinY)
-        self.validatorMaxY.setDecimals(3)
-        self.widgetMaxY.setValidator(self.validatorMaxY)
-        self.widgetMaxY.setAlignment(Qt.AlignCenter)
-        self.widgetMaxY.textChanged.connect(self.setMaxY)
+        self.widgetMaxY = DoubleLineEdit(self.plotSettingsWidget)
+        self.widgetMaxY.setDecimals(3)
+        self.widgetMaxY.valueChanged.connect(self.setMaxY)
         self.plotSettingsLayout.addRow(self.labelMaxY, self.widgetMaxY)
 
         self.plotSettingsDock.setWidget(self.plotSettingsWidget)
@@ -391,6 +437,7 @@ class Recon(QMainWindow):
             layout.setAlignment(Qt.AlignCenter)
             layout.setMargin(0)
             checkBox.stateChanged.connect(self.signals[i].setSelected)
+            checkBox.stateChanged.connect(self.autoRange)
             self.dockSignalsWidget.setCellWidget(i, 0, widget)
 
             # Signal name
@@ -419,35 +466,37 @@ class Recon(QMainWindow):
             smoothWidget.setValidator(smoothValidator)
             smoothWidget.setAlignment(Qt.AlignCenter)
             smoothWidget.textChanged.connect(self.signals[i].setSmooth)
+            smoothWidget.textChanged.connect(self.autoRange)
             smoothWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
             self.dockSignalsWidget.setCellWidget(i, 3, smoothWidget)
 
             # Scale
-            scaleWidget = QLineEdit(self.dockSignalsWidget)
+            scaleWidget = DoubleLineEdit(self.dockSignalsWidget)
             scaleWidget.setFrame(False)
             scaleWidget.setAlignment(Qt.AlignCenter)
             scaleWidget.setText(str(self.signals[i].scale))
             scaleWidget.textChanged.connect(self.signals[i].setScale)
+            scaleWidget.textChanged.connect(self.autoRange)
             scaleWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
             self.dockSignalsWidget.setCellWidget(i, 4, scaleWidget)
 
             # Minimum
-            minWidget = QLineEdit(self.dockSignalsWidget)
+            minWidget = DoubleLineEdit(self.dockSignalsWidget)
             minWidget.setFrame(False)
-            minWidget.setAlignment(Qt.AlignCenter)
             minWidget.setReadOnly(True)
-            minWidget.setText(f'{self.signals[i].minimum:g}')
+            minWidget.setValue(self.signals[i].minimum)
             minWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
             self.dockSignalsWidget.setCellWidget(i, 5, minWidget)
+            self.signals[i].minimumChanged.connect(minWidget.setValue)
 
             # Maximum
-            maxWidget = QLineEdit(self.dockSignalsWidget)
+            maxWidget = DoubleLineEdit(self.dockSignalsWidget)
             maxWidget.setFrame(False)
-            maxWidget.setAlignment(Qt.AlignCenter)
             maxWidget.setReadOnly(True)
-            maxWidget.setText(f'{self.signals[i].maximum:g}')
+            maxWidget.setValue(self.signals[i].maximum)
             maxWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
             self.dockSignalsWidget.setCellWidget(i, 6, maxWidget)
+            self.signals[i].maximumChanged.connect(maxWidget.setValue)
 
             # Color
             color = QColor(self.signals[i].color)
@@ -640,33 +689,39 @@ class Recon(QMainWindow):
             self.setWindowTitle(QCoreApplication.translate('Main', 'Recon plotter - {0}').format(self.filename))
 
     def _update(self):
-        fig, ax = plt.subplots()
-
-        temp: QTemporaryFile = QTemporaryFile()
-        temp.open()
+        temp = tempfile.NamedTemporaryFile(delete=False)
+        print(temp.name)
         temp.close()
 
-        print(temp.fileName())
+        fig, ax = plt.subplots()
 
         for signal in self.signals:
             if signal.selected:
-                ax.plot(signal.smoothed(), self.times, label=signal.name, linewidth=0.25)
+                if signal.smooth > 1:
+                    ax.plot(self.times, signal.smoothedData, label=signal.name, linewidth=0.25)
+                else:
+                    ax.plot(self.times, signal.data, label=signal.name, linewidth=0.25)
 
+        plt.title(self.title)
+        plt.xlabel(self.axisX)
+        plt.ylabel(self.axisY)
         plt.minorticks_on()
         plt.tight_layout()
 
-#        ax.axis(axis)
+        ax.axis([self.min_x, self.max_x, self.min_y, self.max_y])
         ax.legend(loc='best')
         ax.grid(which='minor', linestyle=':')
         ax.grid(which='major', linestyle='-')
 
+        fig.set_dpi(self.imageLabel.physicalDpiX())
+        fig.set_size_inches(self.imageLabel.widthMM() / 25.4, self.imageLabel.heightMM() / 25.4)
         fig.set_size_inches(11.0, 7.5)
         fig.tight_layout()
 
-        plt.savefig(temp.fileName(), format='svg')
+        plt.savefig(temp.name, format='svg')
         plt.close()
 
-        pixmap = QPixmap(temp.fileName())
+        pixmap = QPixmap(temp.name)
         self.imageLabel.setPixmap(pixmap)
 
         self.actionSavePlot.setEnabled(True)
