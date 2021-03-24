@@ -10,13 +10,15 @@ import numpy
 import tempfile
 from time import time
 from typing import List, Optional
+import matplotlib
 import matplotlib.pyplot as plt
-from PySide2.QtGui import QColor, QValidator, QDoubleValidator, QIntValidator, QPalette, QMouseEvent, QBrush, QPixmap
-from PySide2.QtCore import QObject, Signal, QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot
-from PySide2.QtWidgets import QApplication, QCheckBox, QAbstractItemView, QFormLayout,\
+from PySide2.QtGui import QColor, QGuiApplication, QPagedPaintDevice, QValidator, QDoubleValidator, QIntValidator, QPalette, QMouseEvent, QBrush, QPixmap
+from PySide2.QtCore import QObject, QSize, QSizeF, Signal, QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot
+from PySide2.QtWidgets import QApplication, QCheckBox, QAbstractItemView, QComboBox, QFormLayout,\
     QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction, QDockWidget,\
     QLabel, QProgressBar, QScrollArea, QSizePolicy, QGridLayout, QTableWidget, QWidget,\
     QStyleFactory, QColorDialog
+from numpy.core.numeric import isclose
 
 
 class ClicableLabel(QLabel):
@@ -68,7 +70,10 @@ class DoubleLineEdit(QLineEdit):
 
     @Slot(float)
     def setValue(self, value: float) -> None:
-        self.setText(f'{value:g}')
+        if value is None:
+            self.setText('')
+        else:
+            self.setText(f'{value:g}')
 
 
 class AnalogSignal(QObject):
@@ -91,16 +96,29 @@ class AnalogSignal(QObject):
     def update(self):
         if self.smooth > 1:
             window = numpy.ones(self.smooth)/self.smooth
-            self.smoothedData = numpy.convolve(self.data, window, 'same')
+            self.smoothedData = numpy.convolve(self.data, window, 'same') * self.scale
             self.maximum = float('-inf')
             self.minimum = float('inf')
             for value in self.smoothedData:
-                v = value * self.scale
-                self.maximum = max(self.maximum, v)
-                self.minimum = min(self.minimum, v)
+                self.maximum = max(self.maximum, value)
+                self.minimum = min(self.minimum, value)
 
         self.minimumChanged.emit(self.minimum)
         self.maximumChanged.emit(self.maximum)
+
+    def getData(self) -> List[float]:
+        if isclose(self.smooth, 1.0, rtol=0.0001):
+            if isclose(self.scale, 1.0, rtol=0.0001):
+                return self.data
+            return self.smoothedData
+        if isclose(self.scale, 1.0, rtol=0.0001):
+            return self.smoothedData
+        return self.smoothedData * self.scale
+
+    def getName(self) -> str:
+        if isclose(self.scale, 1.0, rtol=0.0001):
+            return self.name
+        return f'{self.name} × {self.scale:0.3g}'
 
     def setName(self, name: str) -> None:
         self.name = name
@@ -139,6 +157,7 @@ class AnalogSignal(QObject):
 
 
 class Recon(QMainWindow):
+
     def __init__(self) -> None:
         self.name: str = ''
         self.dataFileName: str = ''
@@ -155,10 +174,20 @@ class Recon(QMainWindow):
         self.min_y: float = None
         self.max_x: float = None
         self.max_y: float = None
+        self.dpi: float = None
+        self.pageSize: QSizeF = None
 
         super().__init__()
         self.initialize()
         self.restoreSession()
+
+    @Slot(int)
+    def setPageSize(self, index: int) -> None:
+        self.pageSize = self.widgetSize.itemData(index)
+
+    @Slot(float)
+    def setDPI(self, dpi: float) -> None:
+        self.dpi = dpi
 
     @Slot(str)
     def setTitle(self, title: str) -> None:
@@ -210,8 +239,8 @@ class Recon(QMainWindow):
             for signal in self.signals:
                 if self.isSignalsNotSelected() or signal.selected:
                     signal.update()
-                    self.min_y = min(self.min_y, signal.minimum * signal.scale)
-                    self.max_y = max(self.max_y, signal.maximum * signal.scale)
+                    self.min_y = min(self.min_y, signal.minimum)
+                    self.max_y = max(self.max_y, signal.maximum)
 
             # TODO: Round values to more beautiful
 
@@ -238,17 +267,20 @@ class Recon(QMainWindow):
         self.progressBar.hide()
 
         # Add plot display
-        centralwidget = QWidget(self)
-        gridLayout = QGridLayout(centralwidget)
-        scrollArea = QScrollArea(centralwidget)
-        scrollArea.setWidgetResizable(True)
-        scrollAreaWidgetContents = QWidget()
-        self.imageLabel = QLabel(scrollAreaWidgetContents)
-        self.imageLabel.setScaledContents(False)
-        scrollArea.setWidget(scrollAreaWidgetContents)
-        gridLayout.addWidget(scrollArea, 0, 0, 1, 1)
+        self.imageLabel = QLabel(self)
+        self.imageLabel.setBackgroundRole(QPalette.Base)
+        self.imageLabel.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+#        self.imageLabel.setScaledContents(True)
+        self.imageLabel.setAlignment(Qt.AlignCenter)
+        self.imageLabel.setMargin(0)
+        self.imageLabel.setMinimumSize(800, 600)
 
-        self.setCentralWidget(centralwidget)
+        self.scrollArea = QScrollArea()
+        self.scrollArea.setWidget(self.imageLabel)
+        self.scrollArea.setBackgroundRole(QPalette.Dark)
+
+        self.setCentralWidget(self.scrollArea)
+        self.resize(QGuiApplication.primaryScreen().availableSize() * 0.75)
 
         # Plot Settings Dock
         self.plotSettingsDock = QDockWidget(QCoreApplication.translate('PlotSettingsDock', 'Plot Settings'), self)
@@ -306,6 +338,35 @@ class Recon(QMainWindow):
         self.widgetMaxY.setDecimals(3)
         self.widgetMaxY.valueChanged.connect(self.setMaxY)
         self.plotSettingsLayout.addRow(self.labelMaxY, self.widgetMaxY)
+
+        # DPI
+        self.labelDPI = QLabel(QCoreApplication.translate('PlotSettingsDock', 'DPI:'), self.plotSettingsWidget)
+        self.widgetDPI = DoubleLineEdit(self.plotSettingsWidget)
+        self.widgetDPI.setDecimals(3)
+        self.widgetDPI.setValue(self.dpi)
+        self.widgetDPI.valueChanged.connect(self.setDPI)
+        self.plotSettingsLayout.addRow(self.labelDPI, self.widgetDPI)
+
+        # Page size
+        landscape = QCoreApplication.translate('PlotSettingsDock', '{0} landscape')
+        portrate = QCoreApplication.translate('PlotSettingsDock', '{0} portrate')
+
+        self.labelSize = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Page size:'), self.plotSettingsWidget)
+        self.widgetSize = QComboBox(self.plotSettingsWidget)
+
+        self.widgetSize.addItem(landscape.format('A3'), QSizeF(16.535, 11.693))
+        self.widgetSize.addItem(landscape.format('A4'), QSizeF(11.693, 8.268))
+        self.widgetSize.addItem(landscape.format('A5'), QSizeF(8.268, 5.827))
+
+        self.widgetSize.addItem(portrate.format('A3'), QSizeF(11.693, 16.535))
+        self.widgetSize.addItem(portrate.format('A4'), QSizeF(8.268, 11.693))
+        self.widgetSize.addItem(portrate.format('A5'), QSizeF(5.827, 8.268))
+
+        for i in range(self.widgetSize.count()):
+            self.widgetSize.setItemData(i, Qt.AlignCenter, Qt.TextAlignmentRole)
+
+        self.widgetSize.currentIndexChanged.connect(self.setPageSize)
+        self.plotSettingsLayout.addRow(self.labelSize, self.widgetSize)
 
         self.plotSettingsDock.setWidget(self.plotSettingsWidget)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.plotSettingsDock)
@@ -411,11 +472,15 @@ class Recon(QMainWindow):
         settings = QSettings()
         self.restoreGeometry(settings.value('geometry'))
         self.restoreState(settings.value('state'))
+        self.widgetDPI.setValue(float(settings.value('dpi', 600.0)))
+        self.widgetSize.setCurrentIndex(settings.value('size', self.widgetSize.currentIndex()))
 
     def saveSession(self) -> None:
         settings = QSettings()
         settings.setValue('geometry', self.saveGeometry())
         settings.setValue('state', self.saveState())
+        settings.setValue('dpi', self.dpi)
+        settings.setValue('size', self.widgetSize.currentIndex())
 
     def closeEvent(self, event) -> None:
         self.saveSession()
@@ -474,9 +539,9 @@ class Recon(QMainWindow):
             scaleWidget = DoubleLineEdit(self.dockSignalsWidget)
             scaleWidget.setFrame(False)
             scaleWidget.setAlignment(Qt.AlignCenter)
-            scaleWidget.setText(str(self.signals[i].scale))
-            scaleWidget.textChanged.connect(self.signals[i].setScale)
-            scaleWidget.textChanged.connect(self.autoRange)
+            scaleWidget.setValue(self.signals[i].scale)
+            scaleWidget.valueChanged.connect(self.signals[i].setScale)
+            scaleWidget.valueChanged.connect(self.autoRange)
             scaleWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
             self.dockSignalsWidget.setCellWidget(i, 4, scaleWidget)
 
@@ -689,6 +754,7 @@ class Recon(QMainWindow):
             self.setWindowTitle(QCoreApplication.translate('Main', 'Recon plotter - {0}').format(self.filename))
 
     def _update(self):
+
         temp = tempfile.NamedTemporaryFile(delete=False)
         print(temp.name)
         temp.close()
@@ -697,10 +763,7 @@ class Recon(QMainWindow):
 
         for signal in self.signals:
             if signal.selected:
-                if signal.smooth > 1:
-                    ax.plot(self.times, signal.smoothedData, label=signal.name, linewidth=0.25)
-                else:
-                    ax.plot(self.times, signal.data, label=signal.name, linewidth=0.25)
+                ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=0.25)
 
         plt.title(self.title)
         plt.xlabel(self.axisX)
@@ -713,15 +776,16 @@ class Recon(QMainWindow):
         ax.grid(which='minor', linestyle=':')
         ax.grid(which='major', linestyle='-')
 
-        fig.set_dpi(self.imageLabel.physicalDpiX())
-        fig.set_size_inches(self.imageLabel.widthMM() / 25.4, self.imageLabel.heightMM() / 25.4)
-        fig.set_size_inches(11.0, 7.5)
+        fig.set_dpi(self.dpi)
+        fig.set_size_inches(self.pageSize.width(), self.pageSize.height())
         fig.tight_layout()
 
         plt.savefig(temp.name, format='svg')
         plt.close()
 
         pixmap = QPixmap(temp.name)
+        self.imageLabel.setMinimumSize(pixmap.size())
+        self.imageLabel.setMaximumSize(pixmap.size())
         self.imageLabel.setPixmap(pixmap)
 
         self.actionSavePlot.setEnabled(True)
