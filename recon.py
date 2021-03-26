@@ -10,15 +10,20 @@ import numpy
 import tempfile
 from time import time
 from typing import List, Optional
-import matplotlib
-import matplotlib.pyplot as plt
-from PySide2.QtGui import QColor, QGuiApplication, QPagedPaintDevice, QValidator, QDoubleValidator, QIntValidator, QPalette, QMouseEvent, QBrush, QPixmap
-from PySide2.QtCore import QObject, QSize, QSizeF, Signal, QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot
+from PySide2.QtGui import QColor, QGuiApplication, QValidator, QDoubleValidator, QIntValidator, QPalette, QMouseEvent, QBrush, QPixmap
+from PySide2.QtCore import qVersion, QObject, QSizeF, Signal, QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot
 from PySide2.QtWidgets import QApplication, QCheckBox, QAbstractItemView, QComboBox, QFormLayout,\
     QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction, QDockWidget,\
     QLabel, QProgressBar, QScrollArea, QSizePolicy, QGridLayout, QTableWidget, QWidget,\
     QStyleFactory, QColorDialog
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 from numpy.core.numeric import isclose
+if qVersion() >= "5.":
+    from matplotlib.backends.backend_qt5agg import FigureCanvas, FigureCanvasQTAgg
+else:
+    from matplotlib.backends.backend_qt4agg import FigureCanvas, FigureCanvasQTAgg
 
 
 class ClicableLabel(QLabel):
@@ -176,6 +181,7 @@ class Recon(QMainWindow):
         self.max_y: float = None
         self.dpi: float = None
         self.pageSize: QSizeF = None
+        self.figure: Figure = Figure()
 
         super().__init__()
         self.initialize()
@@ -267,20 +273,8 @@ class Recon(QMainWindow):
         self.progressBar.hide()
 
         # Add plot display
-        self.imageLabel = QLabel(self)
-        self.imageLabel.setBackgroundRole(QPalette.Base)
-        self.imageLabel.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
-#        self.imageLabel.setScaledContents(True)
-        self.imageLabel.setAlignment(Qt.AlignCenter)
-        self.imageLabel.setMargin(0)
-        self.imageLabel.setMinimumSize(800, 600)
-
-        self.scrollArea = QScrollArea()
-        self.scrollArea.setWidget(self.imageLabel)
-        self.scrollArea.setBackgroundRole(QPalette.Dark)
-
-        self.setCentralWidget(self.scrollArea)
-        self.resize(QGuiApplication.primaryScreen().availableSize() * 0.75)
+        self.plot = FigureCanvas(self.figure)
+        self.setCentralWidget(self.plot)
 
         # Plot Settings Dock
         self.plotSettingsDock = QDockWidget(QCoreApplication.translate('PlotSettingsDock', 'Plot Settings'), self)
@@ -755,11 +749,8 @@ class Recon(QMainWindow):
 
     def _update(self):
 
-        temp = tempfile.NamedTemporaryFile(delete=False)
-        print(temp.name)
-        temp.close()
-
-        fig, ax = plt.subplots()
+        self.figure.clear()
+        ax = self.figure.subplots()
 
         for signal in self.signals:
             if signal.selected:
@@ -776,26 +767,27 @@ class Recon(QMainWindow):
         ax.grid(which='minor', linestyle=':')
         ax.grid(which='major', linestyle='-')
 
-        fig.set_dpi(self.dpi)
-        fig.set_size_inches(self.pageSize.width(), self.pageSize.height())
-        fig.tight_layout()
+#        self.figure.set_dpi(self.dpi)
+#        self.figure.set_size_inches(self.pageSize.width(), self.pageSize.height())
 
-        plt.savefig(temp.name, format='svg')
-        plt.close()
-
-        pixmap = QPixmap(temp.name)
-        self.imageLabel.setMinimumSize(pixmap.size())
-        self.imageLabel.setMaximumSize(pixmap.size())
-        self.imageLabel.setPixmap(pixmap)
+        self.figure.tight_layout()
+        self.figure.canvas.draw()
 
         self.actionSavePlot.setEnabled(True)
         self.actionSavePlotAs.setEnabled(True)
+
+        print('finished')
 
     def _savePlot(self, filename: str) -> None:
         pass
 
 
 if __name__ == "__main__":
+
+    print(f'Qt version: {qVersion()}')
+
+    # Increase matplotlib limit
+    mpl.rcParams['agg.path.chunksize'] = 100000
 
     app = QApplication(sys.argv)
     app.setOrganizationName('Oleksandr Kolodkin')
