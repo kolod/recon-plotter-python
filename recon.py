@@ -7,23 +7,24 @@
 import sys
 import os
 import numpy
-import tempfile
 from time import time
 from typing import List, Optional
-from PySide2.QtGui import QColor, QGuiApplication, QValidator, QDoubleValidator, QIntValidator, QPalette, QMouseEvent, QBrush, QPixmap
-from PySide2.QtCore import qVersion, QObject, QSizeF, Signal, QCoreApplication, QLocale, QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot
-from PySide2.QtWidgets import QApplication, QCheckBox, QAbstractItemView, QComboBox, QFormLayout,\
-    QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction, QDockWidget,\
-    QLabel, QProgressBar, QScrollArea, QSizePolicy, QGridLayout, QTableWidget, QWidget,\
-    QStyleFactory, QColorDialog
+from PySide2.QtGui import (QColor, QValidator, QDoubleValidator, QIntValidator,
+                           QPalette, QMouseEvent, QBrush)
+from PySide2.QtCore import (qVersion, QObject, QSizeF, Signal, QCoreApplication, QLocale,
+                            QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot)
+from PySide2.QtWidgets import (QApplication, QCheckBox, QAbstractItemView, QComboBox, QFormLayout,
+                               QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction,
+                               QDockWidget, QLabel, QProgressBar, QSizePolicy, QGridLayout, QTableWidget,
+                               QWidget, QStyleFactory, QColorDialog)
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from numpy.core.numeric import isclose
 if qVersion() >= "5.":
-    from matplotlib.backends.backend_qt5agg import FigureCanvas, FigureCanvasQTAgg
+    from matplotlib.backends.backend_qt5agg import FigureCanvas
 else:
-    from matplotlib.backends.backend_qt4agg import FigureCanvas, FigureCanvasQTAgg
+    from matplotlib.backends.backend_qt4agg import FigureCanvas
 
 
 class ClicableLabel(QLabel):
@@ -101,10 +102,10 @@ class AnalogSignal(QObject):
     def update(self):
         if self.smooth > 1:
             window = numpy.ones(self.smooth)/self.smooth
-            self.smoothedData = numpy.convolve(self.data, window, 'same') * self.scale
+            self.smoothedData = numpy.convolve(self.data, window, 'same')
             self.maximum = float('-inf')
             self.minimum = float('inf')
-            for value in self.smoothedData:
+            for value in self.smoothedData * self.scale:
                 self.maximum = max(self.maximum, value)
                 self.minimum = min(self.minimum, value)
 
@@ -112,13 +113,8 @@ class AnalogSignal(QObject):
         self.maximumChanged.emit(self.maximum)
 
     def getData(self) -> List[float]:
-        if isclose(self.smooth, 1.0, rtol=0.0001):
-            if isclose(self.scale, 1.0, rtol=0.0001):
-                return self.data
-            return self.smoothedData
-        if isclose(self.scale, 1.0, rtol=0.0001):
-            return self.smoothedData
-        return self.smoothedData * self.scale
+        result = self.data if self.smooth == 1 else self.smoothedData
+        return result if isclose(self.scale, 1.0, rtol=0.0001) else result * self.scale
 
     def getName(self) -> str:
         if isclose(self.scale, 1.0, rtol=0.0001):
