@@ -162,7 +162,7 @@ class Recon(QMainWindow):
     def __init__(self) -> None:
         self.name: str = ''
         self.dataFileName: str = ''
-        self.plotFileName: str = None
+        self.plotFileName: str = ''
         self.times: list = []
         self.signals: List[AnalogSignal] = []
         self.progressBar: QProgressBar = None
@@ -763,9 +763,6 @@ class Recon(QMainWindow):
         ax.grid(which='minor', linestyle=':')
         ax.grid(which='major', linestyle='-')
 
-#        self.figure.set_dpi(self.dpi)
-#        self.figure.set_size_inches(self.pageSize.width(), self.pageSize.height())
-
         self.figure.tight_layout()
         self.figure.canvas.draw()
 
@@ -775,7 +772,32 @@ class Recon(QMainWindow):
         print('finished')
 
     def _savePlot(self, filename: str) -> None:
-        pass
+        self.plotFileName = filename
+        QSettings().setValue('default_plot_path', os.path.dirname(os.path.abspath(filename)))
+
+        fig = Figure()
+        ax = fig.subplots()
+
+        for signal in self.signals:
+            if signal.selected:
+                ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=0.25)
+
+        plt.title(self.title)
+        plt.xlabel(self.axisX)
+        plt.ylabel(self.axisY)
+        plt.minorticks_on()
+        plt.tight_layout()
+
+        ax.axis([self.min_x, self.max_x, self.min_y, self.max_y])
+        ax.legend(loc='best')
+        ax.grid(which='minor', linestyle=':')
+        ax.grid(which='major', linestyle='-')
+
+        fig.set_size_inches(self.pageSize.width(), self.pageSize.height())
+        fig.tight_layout()
+
+        fig.savefig(filename, dpi=self.dpi)
+        print('finished')
 
 
 if __name__ == "__main__":
