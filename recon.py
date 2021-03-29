@@ -159,7 +159,7 @@ class AnalogSignal(QObject):
 
     def getData(self) -> List[float]:
         result = self.data if self.smooth == 1 else self.smoothedData
-        return result if isclose(self.scale, 1.0, rtol=0.0001) else result * self.scale
+        return result if isclose(self.scale, 1.0, rtol=0.0001) else [v * self.scale for v in result]
 
     def getName(self) -> str:
         if isclose(self.scale, 1.0, rtol=0.0001):
@@ -293,6 +293,7 @@ class Recon(QMainWindow):
 
             # TODO: Round values to more beautiful
             self.updateRange()
+            self._update()
 
     def updateRange(self):
         # Update validators
@@ -461,6 +462,12 @@ class Recon(QMainWindow):
         self.actionExit.triggered.connect(self.close)
 
         # Plot actions
+        self.actionAutoRange = QAction(QCoreApplication.translate('Menu', 'Fit to signal &range'))
+        self.actionAutoRange.setShortcut(QCoreApplication.translate('Menu', 'F4'))
+        self.actionAutoRange.setStatusTip(QCoreApplication.translate('Menu', 'Recalculate signals limits & update plot ranges'))
+        self.actionAutoRange.setDisabled(True)
+        self.actionAutoRange.triggered.connect(self.autoRange)
+
         self.actionBuildPlot = QAction(QCoreApplication.translate('Menu', '&Update'), self)
         self.actionBuildPlot.setShortcut(QCoreApplication.translate('Menu', 'F5'))
         self.actionBuildPlot.setStatusTip(QCoreApplication.translate('Menu', 'Update plot'))
@@ -497,7 +504,7 @@ class Recon(QMainWindow):
         menuFile.addAction(self.actionExit)
 
         menuPlot = menubar.addMenu(QCoreApplication.translate('Menu', '&Plot'))
-        menuPlot.addAction(self.actionBuildPlot)
+        menuPlot.addActions([self.actionAutoRange, self.actionBuildPlot])
         menuPlot.addSeparator()
         menuPlot.addActions([self.actionSavePlot, self.actionSavePlotAs])
 
@@ -677,21 +684,21 @@ class Recon(QMainWindow):
 
     def _load(self, filename: str) -> None:
         if os.path.isfile(filename):
-            self.filename = filename
+            self.dataFileName = filename
             doAutoRange = True
 
             # Save path for next use
             QSettings().setValue('default_data_path', os.path.dirname(os.path.abspath(filename)))
 
             # Change window title
-            self.setWindowTitle(QCoreApplication.translate('Main', 'Recon plotter - {0}').format(self.filename))
+            self.setWindowTitle(QCoreApplication.translate('Main', 'Recon plotter - {0}').format(self.dataFileName))
 
             # Reset signals
             self.times.clear()
             self.signals.clear()
 
             # Open data file
-            with open(self.filename, 'r', encoding='cp1251') as df:
+            with open(self.dataFileName, 'r', encoding='cp1251') as df:
 
                 # Get total size
                 total = os.fstat(df.fileno()).st_size
@@ -755,6 +762,7 @@ class Recon(QMainWindow):
             self.actionSave.setEnabled(True)
             self.actionSaveAs.setEnabled(True)
             self.actionBuildPlot.setEnabled(True)
+            self.actionAutoRange.setEnabled(True)
             if doAutoRange:
                 self.autoRange()
             else:
@@ -839,7 +847,7 @@ class Recon(QMainWindow):
         for signal in self.signals:
             if signal.selected:
                 signal.update()
-                ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=0.25)
+                ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=0.25, color=signal.color)
                 addLegend = True
 
         ax.axis([self.min_x, self.max_x, self.min_y, self.max_y])
@@ -867,7 +875,7 @@ class Recon(QMainWindow):
 
         for signal in self.signals:
             if signal.selected:
-                ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=0.25)
+                ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=0.25, color=signal.color)
 
         ax.axis([self.min_x, self.max_x, self.min_y, self.max_y])
         ax.set_title(self.title)
