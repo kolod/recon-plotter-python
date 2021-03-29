@@ -142,7 +142,7 @@ class AnalogSignal(QObject):
         self.smoothedData: List[float] = None
         self.maximum: float = float('-inf')
         self.minimum: float = float('inf')
-        self.color: str = 'green'
+        self.color: str = None
 
     def update(self):
         if self.smooth > 1:
@@ -680,7 +680,8 @@ class Recon(QMainWindow):
     def _set_colors(self):
         colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
         for i in range(len(self.signals)):
-            self.signals[i].color = colors[i % len(colors)]
+            if self.signals[i].color is None:
+                self.signals[i].color = colors[i % len(colors)]
 
     def _load(self, filename: str) -> None:
         if os.path.isfile(filename):
@@ -706,21 +707,30 @@ class Recon(QMainWindow):
 
                 # Get name of the recon record
                 if line := df.readline():
-                    if len(line):
-                        data = readCommaSeparatedLine(line)
-                        self.title = data[0] if len(data) >= 1 else ''
-                        self.device = data[1] if len(data) >= 2 else ''
-                        self.originalFileName = data[2] if len(data) >= 3 else ''
-                        self.axisX = data[3] if len(data) >= 4 else ''
-                        self.axisY = data[4] if len(data) >= 5 else ''
-                        self.min_x = float(data[5]) if len(data) >= 6 else self.min_x
-                        self.max_x = float(data[6]) if len(data) >= 7 else self.max_x
-                        self.min_y = float(data[7]) if len(data) >= 8 else self.min_y
-                        self.max_y = float(data[8]) if len(data) >= 9 else self.max_y
-                        doAutoRange = len(data) < 6
+                    data = readCommaSeparatedLine(line)
+                    if len(data) >= 1:
+                        self.title = data[0]
+                    if len(data) >= 2:
+                        self.device = data[1]
+                    if len(data) >= 3:
+                        self.originalFileName = data[2]
+                    if len(data) >= 4:
+                        self.axisX = data[3]
+                    if len(data) >= 5:
+                        self.axisY = data[4]
+                    if len(data) >= 6:
+                        self.min_x = float(data[5])
+                    if len(data) >= 7:
+                        self.max_x = float(data[6])
+                    if len(data) >= 8:
+                        self.min_y = float(data[7])
+                    if len(data) >= 9:
+                        self.max_y = float(data[8])
+                        doAutoRange = False
 
                 # Get signal names
                 while (line := df.readline()) != '':
+                    signal = None
                     data = readCommaSeparatedLine(line)
                     if len(data) and data[0] == '1':
                         continue
@@ -728,9 +738,13 @@ class Recon(QMainWindow):
                         break
                     if len(data) >= 3:
                         signal = AnalogSignal(data[2])
-                        signal.selected = bool(strtobool(data[3])) if len(data) >= 4 else False
-                        signal.scale = float(data[4]) if len(data) >= 5 else 1.0
-                        signal.smooth = int(data[5]) if len(data) >= 6 else 1
+                    if len(data) >= 4 and data[3] != '':
+                        signal.selected = strtobool(data[3])
+                    if len(data) >= 5:
+                        signal.scale = float(data[4])
+                    if len(data) >= 6:
+                        signal.smooth = int(data[5])
+                    if signal is not None:
                         self.signals.append(signal)
 
                 # Update progress
@@ -763,13 +777,10 @@ class Recon(QMainWindow):
             self.actionSaveAs.setEnabled(True)
             self.actionBuildPlot.setEnabled(True)
             self.actionAutoRange.setEnabled(True)
-            if doAutoRange:
-                self.autoRange()
-            else:
-                self.updateRange()
             self.widgetTitle.setText(self.title)
             self.widgetAxisX.setText(self.axisX)
             self.widgetAxisY.setText(self.axisY)
+            self.autoRange() if doAutoRange else self.updateRange()
             self.rebuildSignalsDock()
             self._update()
 
