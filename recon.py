@@ -6,6 +6,7 @@
 
 import sys
 import os
+from matplotlib.backend_bases import Event
 import numpy
 from distutils.util import strtobool
 from time import time
@@ -22,7 +23,9 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from matplotlib.backend_bases import KeyEvent
 from numpy.core.numeric import isclose
+
 if qVersion() >= "5.":
     from matplotlib.backends.backend_qt5agg import FigureCanvas
 else:
@@ -318,6 +321,8 @@ class Recon(QMainWindow):
         self.progressBar.setAlignment(Qt.AlignCenter)
         self.progressBar.hide()
 
+        self.figure.canvas.mpl_connect('key_press_event', self._key)
+
         # Add plot display
         self.plot = FigureCanvas(self.figure)
         self.setCentralWidget(self.plot)
@@ -489,8 +494,14 @@ class Recon(QMainWindow):
         # Viev actions
         self.actionSignalsDock = self.dockSignals.toggleViewAction()
         self.actionSignalsDock.setStatusTip(QCoreApplication.translate('Menu', 'Show/hide signals window'))
+
         self.actionSettingsDock = self.plotSettingsDock.toggleViewAction()
         self.actionSettingsDock.setStatusTip(QCoreApplication.translate('Menu', 'Show/hide plot settings window'))
+
+        self.actionFullScreen = QAction(QCoreApplication.translate('Menu', '&Full screan'))
+        self.actionFullScreen.setStatusTip(QCoreApplication.translate('Menu', 'Show plot in full screan'))
+        self.actionFullScreen.setShortcut(QCoreApplication.translate('Menu', 'F11'))
+        self.actionFullScreen.triggered.connect(self._fullscreen)
 
         # Help actions
         self.actionAboutQt = QAction(QCoreApplication.translate('Menu', 'About Qt...'), self)
@@ -510,6 +521,8 @@ class Recon(QMainWindow):
 
         menuView = menubar.addMenu(QCoreApplication.translate('Menu', '&View'))
         menuView.addActions([self.actionSignalsDock, self.actionSettingsDock])
+        menuView.addSeparator()
+        menuView.addAction(self.actionFullScreen)
 
         menuHelp = menubar.addMenu(QCoreApplication.translate('Menu', '&Help'))
         menuHelp.addAction(self.actionAboutQt)
@@ -676,6 +689,26 @@ class Recon(QMainWindow):
         dialog.setWindowTitle(QCoreApplication.translate('FileDialog', 'Save plot'))
         dialog.fileSelected.connect(self._savePlot)
         dialog.open()
+
+    def _key(self, event):
+        if event.key in ['escape', 'f11']:
+            self._fullscreen()
+
+    @Slot()
+    @Slot(bool)
+    def _fullscreen(self):
+        if self.plot.isFullScreen():
+            self.plot.setWindowFlags(Qt.SubWindow)
+            self.plot.showNormal()
+            self.restoreState(self._state)
+            self.restoreGeometry(self._geometry)
+            self._update()
+        else:
+            self._geometry = self.saveGeometry()
+            self._state = self.saveState()
+            self.plot.setWindowFlags(Qt.Window)
+            self.plot.showFullScreen()
+            self._update()
 
     def _set_colors(self):
         colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
