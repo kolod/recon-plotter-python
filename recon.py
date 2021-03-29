@@ -6,7 +6,6 @@
 
 import sys
 import os
-from matplotlib.backend_bases import Event
 import numpy
 from distutils.util import strtobool
 from time import time
@@ -23,7 +22,6 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from matplotlib.backend_bases import KeyEvent
 from numpy.core.numeric import isclose
 
 if qVersion() >= "5.":
@@ -228,6 +226,7 @@ class Recon(QMainWindow):
         self.dpi: float = None
         self.pageSize: QSizeF = None
         self.figure: Figure = Figure()
+        self.ax: Axes = None
 
         super().__init__()
         self.initialize()
@@ -268,6 +267,13 @@ class Recon(QMainWindow):
     @Slot(float)
     def setMaxY(self, value: float) -> None:
         self.max_y = value
+
+    def timeToIndex(self, time: float) -> int:
+        if len(self.times) > 3:
+            if (time >= -0.000001) and (time <= (self.times[-1] + 0.00001)):
+                delta = self.times[-1] / (len(self.times) - 1)
+                return int(time / delta)
+        return -1
 
     def isSignalsNotSelected(self) -> bool:
         for signal in self.signals:
@@ -322,6 +328,7 @@ class Recon(QMainWindow):
         self.progressBar.hide()
 
         self.figure.canvas.mpl_connect('key_press_event', self._key)
+        self.figure.canvas.mpl_connect('motion_notify_event', self._mouse_move)
 
         # Add plot display
         self.plot = FigureCanvas(self.figure)
@@ -690,6 +697,19 @@ class Recon(QMainWindow):
         dialog.fileSelected.connect(self._savePlot)
         dialog.open()
 
+    def _mouse_move(self, event):
+        if not event.inaxes:
+            self.statusBar().clearMessage()
+        else:
+            x = event.xdata
+            msg = QCoreApplication.translate('status', 'Time: {0:g} [s]').format(x)
+            i = self.timeToIndex(x)
+            if i >= 0:
+                for signal in self.signals:
+                    if signal.selected:
+                        msg += f',  {signal.name:s}: {signal.data[i]:g} [{signal.unit}]'
+            self.statusBar().showMessage(msg)
+
     def _key(self, event):
         if event.key in ['escape', 'f11']:
             self._fullscreen()
@@ -885,24 +905,24 @@ class Recon(QMainWindow):
     def _update(self):
 
         self.figure.clear()
-        ax: Axes = self.figure.subplots()
+        self.ax: Axes = self.figure.subplots()
 
         addLegend: bool = False
         for signal in self.signals:
             if signal.selected:
                 signal.update()
-                ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=0.25, color=signal.color)
+                self.ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=0.25, color=signal.color)
                 addLegend = True
 
-        ax.axis([self.min_x, self.max_x, self.min_y, self.max_y])
-        ax.set_title(self.title)
-        ax.set_xlabel(self.axisX)
-        ax.set_ylabel(self.axisY)
+        self.ax.axis([self.min_x, self.max_x, self.min_y, self.max_y])
+        self.ax.set_title(self.title)
+        self.ax.set_xlabel(self.axisX)
+        self.ax.set_ylabel(self.axisY)
         if addLegend:
-            ax.legend(loc='best')
-        ax.grid(b=True, which='major', linestyle='-')
-        ax.grid(b=True, which='minor', linestyle=':')
-        ax.minorticks_on()
+            self.ax.legend(loc='best')
+        self.ax.grid(b=True, which='major', linestyle='-')
+        self.ax.grid(b=True, which='minor', linestyle=':')
+        self.ax.minorticks_on()
 
         self.figure.tight_layout()
         self.figure.canvas.draw()
