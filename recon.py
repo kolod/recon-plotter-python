@@ -47,7 +47,7 @@ def readCommaSeparatedLine(line: str) -> List[str]:
             if isStringStarted and not lastCharIsQuote:
                 value += char
             else:
-                result.append(value)
+                result.append(value.strip())
                 isStringStarted = False
                 value = ''
             lastCharIsQuote = False
@@ -56,7 +56,7 @@ def readCommaSeparatedLine(line: str) -> List[str]:
             lastCharIsQuote = False
 
     if len(value):
-        result.append(value)
+        result.append(value.strip())
     return result
 
 
@@ -202,6 +202,8 @@ class Recon(QMainWindow):
         self.dockSignals: QDockWidget = None
         self.dockSignalsWidget: QTableWidget = None
         self.title: str = ''
+        self.device: str = ''
+        self.originalFileName: str = ''
         self.axisX: str = ''
         self.axisY: str = ''
         self.min_x: float = None
@@ -468,6 +470,8 @@ class Recon(QMainWindow):
         # Viev actions
         self.actionSignalsDock = self.dockSignals.toggleViewAction()
         self.actionSignalsDock.setStatusTip(QCoreApplication.translate('Menu', 'Show/hide signals window'))
+        self.actionSettingsDock = self.plotSettingsDock.toggleViewAction()
+        self.actionSettingsDock.setStatusTip(QCoreApplication.translate('Menu', 'Show/hide plot settings window'))
 
         # Help actions
         self.actionAboutQt = QAction(QCoreApplication.translate('Menu', 'About Qt...'), self)
@@ -486,7 +490,7 @@ class Recon(QMainWindow):
         menuPlot.addActions([self.actionSavePlot, self.actionSavePlotAs])
 
         menuView = menubar.addMenu(QCoreApplication.translate('Menu', '&View'))
-        menuView.addAction(self.actionSignalsDock)
+        menuView.addActions([self.actionSignalsDock, self.actionSettingsDock])
 
         menuHelp = menubar.addMenu(QCoreApplication.translate('Menu', '&Help'))
         menuHelp.addAction(self.actionAboutQt)
@@ -684,15 +688,16 @@ class Recon(QMainWindow):
                 if line := df.readline():
                     if len(line):
                         data = readCommaSeparatedLine(line)
-                        self.name = data[0] if len(data) >= 1 else ''
-                        self.title = data[3] if len(data) >= 4 else ''
-                        self.axisX = data[4] if len(data) >= 5 else ''
-                        self.axisY = data[5] if len(data) >= 6 else ''
-                        self.min_x = float(data[6]) if len(data) >= 7 else self.min_x
-                        self.max_x = float(data[7]) if len(data) >= 8 else self.max_x
-                        self.min_y = float(data[8]) if len(data) >= 9 else self.min_y
-                        self.max_y = float(data[9]) if len(data) >= 10 else self.max_y
-                        doAutoRange = False
+                        self.title = data[0] if len(data) >= 1 else ''
+                        self.device = data[1] if len(data) >= 2 else ''
+                        self.originalFileName = data[2] if len(data) >= 3 else ''
+                        self.axisX = data[3] if len(data) >= 4 else ''
+                        self.axisY = data[4] if len(data) >= 5 else ''
+                        self.min_x = float(data[5]) if len(data) >= 6 else self.min_x
+                        self.max_x = float(data[6]) if len(data) >= 7 else self.max_x
+                        self.min_y = float(data[7]) if len(data) >= 8 else self.min_y
+                        self.max_y = float(data[8]) if len(data) >= 9 else self.max_y
+                        doAutoRange = len(data) < 6
 
                 # Get signal names
                 while (line := df.readline()) != '':
@@ -742,6 +747,7 @@ class Recon(QMainWindow):
             self.widgetAxisX.setText(self.axisX)
             self.widgetAxisY.setText(self.axisY)
             self.rebuildSignalsDock()
+            self._update()
 
     def _save(self, filename: str) -> None:
         with open(filename, 'w', encoding='cp1251') as df:
@@ -750,7 +756,7 @@ class Recon(QMainWindow):
             lasttime = time()
 
             # write header
-            df.write(f'"{filename}",,,"{self.title}","{self.axisX}","{self.axisY}",{self.min_x},{self.max_x},{self.min_y},{self.max_y}\n\n')
+            df.write(f'"{self.title}", {self.device}, {self.originalFileName}, "{self.title}", "{self.axisX}", "{self.axisY}", {self.min_x:g}, {self.max_x:g}, {self.min_y:g}, {self.max_y:g}\n\n')
 
             # write signals descriptions
             for i in range(len(self.signals)):
@@ -794,16 +800,19 @@ class Recon(QMainWindow):
         self.figure.clear()
         ax: Axes = self.figure.subplots()
 
+        addLegend: bool = False
         for signal in self.signals:
             if signal.selected:
                 signal.update()
                 ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=0.25)
+                addLegend = True
 
         ax.axis([self.min_x, self.max_x, self.min_y, self.max_y])
         ax.set_title(self.title)
         ax.set_xlabel(self.axisX)
         ax.set_ylabel(self.axisY)
-        ax.legend(loc='best')
+        if addLegend:
+            ax.legend(loc='best')
         ax.grid(b=True, which='major', linestyle='-')
         ax.grid(b=True, which='minor', linestyle=':')
         ax.minorticks_on()
