@@ -7,6 +7,7 @@
 import sys
 import os
 import numpy
+from distutils.util import strtobool
 from time import time
 from typing import Any, List, Optional
 from PySide2.QtGui import (QColor, QValidator, QDoubleValidator, QIntValidator,
@@ -31,33 +32,44 @@ else:
 def readCommaSeparatedLine(line: str) -> List[str]:
     result = []
     isStringStarted = False
-    lastCharIsQuote = False
     value = ''
-    for char in line:
-        if char == '"':
+    for i in range(len(line)):
+        if line[i] == '"':
             if isStringStarted:
-                if lastCharIsQuote:
-                    value += char
-                else:
-                    lastCharIsQuote = False
-                lastCharIsQuote = True
+                if i > 1 and line[i-1] == '"':
+                    value += '"'
             else:
                 isStringStarted = True
-        elif char == ',':
-            if isStringStarted and not lastCharIsQuote:
-                value += char
+        elif line[i] == ',':
+            if (i > 2 and line[i-1] == '"' and line[i-2] == '"') or (isStringStarted and line[i-1] != '"'):
+                value += line[i]
             else:
                 result.append(value.strip())
                 isStringStarted = False
                 value = ''
-            lastCharIsQuote = False
         else:
-            value += char
-            lastCharIsQuote = False
+            value += line[i]
 
     if len(value):
         result.append(value.strip())
     return result
+
+
+def writeCommaSeparatedLine(values: List[Any]) -> str:
+    result = []
+    for value in values:
+        if type(value) == list:
+            result.append(writeCommaSeparatedLine(value))
+        elif type(value) == str:
+            if '"' in value:
+                value = value.replace('"', '""')
+                value = f'"{value}"'
+            elif ',' in value:
+                value = f'"{value}"'
+            result.append(value)
+        else:
+            result.append(str(value))
+    return ', '.join(result)
 
 
 class ClicableLabel(QLabel):
@@ -528,6 +540,7 @@ class Recon(QMainWindow):
             layout.addWidget(checkBox)
             layout.setAlignment(Qt.AlignCenter)
             layout.setMargin(0)
+            checkBox.setChecked(self.signals[i].selected)
             checkBox.stateChanged.connect(self.signals[i].setSelected)
             self.dockSignalsWidget.setCellWidget(i, 0, widget)
 
@@ -701,14 +714,17 @@ class Recon(QMainWindow):
 
                 # Get signal names
                 while (line := df.readline()) != '':
-                    if line.startswith('         1'):
+                    data = readCommaSeparatedLine(line)
+                    if len(data) and data[0] == '1':
                         continue
-                    if line.startswith('         N'):
+                    if len(data) and data[0] == 'N':
                         break
-                    if len(line) and line != '\n':
-                        data = line.split(',')
-                        if len(data) >= 3:
-                            self.signals.append(AnalogSignal(data[2].strip()))
+                    if len(data) >= 3:
+                        signal = AnalogSignal(data[2])
+                        signal.selected = bool(strtobool(data[3])) if len(data) >= 4 else False
+                        signal.scale = float(data[4]) if len(data) >= 5 else 1.0
+                        signal.smooth = int(data[5]) if len(data) >= 6 else 1
+                        self.signals.append(signal)
 
                 # Update progress
                 self.progressUpdate(df.tell())
@@ -756,15 +772,34 @@ class Recon(QMainWindow):
             lasttime = time()
 
             # write header
-            df.write(f'"{self.title}", {self.device}, {self.originalFileName}, "{self.title}", "{self.axisX}", "{self.axisY}", {self.min_x:g}, {self.max_x:g}, {self.min_y:g}, {self.max_y:g}\n\n')
+            df.write(writeCommaSeparatedLine([
+                self.title,
+                self.device,
+                self.originalFileName,
+                self.axisX,
+                self.axisY,
+                f'{self.min_x:g}',
+                f'{self.max_x:g}',
+                f'{self.min_y:g}',
+                f'{self.max_y:g}'
+            ]) + '\n\n')
 
             # write signals descriptions
             for i in range(len(self.signals)):
-                ak = str(f'АК-{i+1}')
-                df.write(f'{i+2:4d},{ak:>6s}, {self.signals[i].name}\n')
+                df.write(writeCommaSeparatedLine([
+                    f'{i+3:4d}',
+                    f'АК-{i+1}',
+                    self.signals[i].name,
+                    self.signals[i].selected,
+                    self.signals[i].scale,
+                    self.signals[i].smooth,
+                    self.signals[i].color
+                ]) + '\n')
+
+            # write table header
             df.write('\n         1,              2,')
             for i in range(len(self.signals)):
-                df.write(f'{i:10d},')
+                df.write(f'{i+3:10d},')
             df.write('\n         N,              t,')
             for i in range(len(self.signals)):
                 ak = str(f'АК-{i+1}')
