@@ -8,7 +8,7 @@ import sys
 import os
 import numpy
 from time import time
-from typing import List, Optional
+from typing import Any, List, Optional
 from PySide2.QtGui import (QColor, QValidator, QDoubleValidator, QIntValidator,
                            QPalette, QMouseEvent, QBrush)
 from PySide2.QtCore import (qVersion, QObject, QSizeF, Signal, QCoreApplication, QLocale,
@@ -19,12 +19,45 @@ from PySide2.QtWidgets import (QApplication, QCheckBox, QAbstractItemView, QComb
                                QWidget, QStyleFactory, QColorDialog)
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from numpy.core.numeric import isclose
 if qVersion() >= "5.":
     from matplotlib.backends.backend_qt5agg import FigureCanvas
 else:
     from matplotlib.backends.backend_qt4agg import FigureCanvas
+
+
+def readCommaSeparatedLine(line: str) -> List[str]:
+    result = []
+    isStringStarted = False
+    lastCharIsQuote = False
+    value = ''
+    for char in line:
+        if char == '"':
+            if isStringStarted:
+                if lastCharIsQuote:
+                    value += char
+                else:
+                    lastCharIsQuote = False
+                lastCharIsQuote = True
+            else:
+                isStringStarted = True
+        elif char == ',':
+            if isStringStarted and not lastCharIsQuote:
+                value += char
+            else:
+                result.append(value)
+                isStringStarted = False
+                value = ''
+            lastCharIsQuote = False
+        else:
+            value += char
+            lastCharIsQuote = False
+
+    if len(value):
+        result.append(value)
+    return result
 
 
 class ClicableLabel(QLabel):
@@ -245,18 +278,20 @@ class Recon(QMainWindow):
                     self.max_y = max(self.max_y, signal.maximum)
 
             # TODO: Round values to more beautiful
+            self.updateRange()
 
-            # Update validators
-            self.widgetMinX.setRange(self.min_x, self.max_x)
-            self.widgetMaxX.setRange(self.min_x, self.max_x)
-            self.widgetMinY.setRange(self.min_y, self.max_y)
-            self.widgetMaxY.setRange(self.min_y, self.max_y)
+    def updateRange(self):
+        # Update validators
+        self.widgetMinX.setRange(self.min_x, self.max_x)
+        self.widgetMaxX.setRange(self.min_x, self.max_x)
+        self.widgetMinY.setRange(self.min_y, self.max_y)
+        self.widgetMaxY.setRange(self.min_y, self.max_y)
 
-            # Update range
-            self.widgetMinX.setValue(self.min_x)
-            self.widgetMaxX.setValue(self.max_x)
-            self.widgetMinY.setValue(self.min_y)
-            self.widgetMaxY.setValue(self.max_y)
+        # Update range
+        self.widgetMinX.setValue(self.min_x)
+        self.widgetMaxX.setValue(self.max_x)
+        self.widgetMinY.setValue(self.min_y)
+        self.widgetMaxY.setValue(self.max_y)
 
     def initialize(self) -> None:
         self.setWindowTitle('Recon plotter')
@@ -343,11 +378,9 @@ class Recon(QMainWindow):
 
         self.labelSize = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Page size:'), self.plotSettingsWidget)
         self.widgetSize = QComboBox(self.plotSettingsWidget)
-
         self.widgetSize.addItem(landscape.format('A3'), QSizeF(16.535, 11.693))
         self.widgetSize.addItem(landscape.format('A4'), QSizeF(11.693, 8.268))
         self.widgetSize.addItem(landscape.format('A5'), QSizeF(8.268, 5.827))
-
         self.widgetSize.addItem(portrate.format('A3'), QSizeF(11.693, 16.535))
         self.widgetSize.addItem(portrate.format('A4'), QSizeF(8.268, 11.693))
         self.widgetSize.addItem(portrate.format('A5'), QSizeF(5.827, 8.268))
@@ -492,7 +525,6 @@ class Recon(QMainWindow):
             layout.setAlignment(Qt.AlignCenter)
             layout.setMargin(0)
             checkBox.stateChanged.connect(self.signals[i].setSelected)
-            checkBox.stateChanged.connect(self.autoRange)
             self.dockSignalsWidget.setCellWidget(i, 0, widget)
 
             # Signal name
@@ -521,7 +553,6 @@ class Recon(QMainWindow):
             smoothWidget.setValidator(smoothValidator)
             smoothWidget.setAlignment(Qt.AlignCenter)
             smoothWidget.textChanged.connect(self.signals[i].setSmooth)
-            smoothWidget.textChanged.connect(self.autoRange)
             smoothWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
             self.dockSignalsWidget.setCellWidget(i, 3, smoothWidget)
 
@@ -531,7 +562,6 @@ class Recon(QMainWindow):
             scaleWidget.setAlignment(Qt.AlignCenter)
             scaleWidget.setValue(self.signals[i].scale)
             scaleWidget.valueChanged.connect(self.signals[i].setScale)
-            scaleWidget.valueChanged.connect(self.autoRange)
             scaleWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
             self.dockSignalsWidget.setCellWidget(i, 4, scaleWidget)
 
@@ -631,6 +661,7 @@ class Recon(QMainWindow):
     def _load(self, filename: str) -> None:
         if os.path.isfile(filename):
             self.filename = filename
+            doAutoRange = True
 
             # Save path for next use
             QSettings().setValue('default_data_path', os.path.dirname(os.path.abspath(filename)))
@@ -652,7 +683,16 @@ class Recon(QMainWindow):
                 # Get name of the recon record
                 if line := df.readline():
                     if len(line):
-                        self.name = line.split(',')[0]
+                        data = readCommaSeparatedLine(line)
+                        self.name = data[0] if len(data) >= 1 else ''
+                        self.title = data[3] if len(data) >= 4 else ''
+                        self.axisX = data[4] if len(data) >= 5 else ''
+                        self.axisY = data[5] if len(data) >= 6 else ''
+                        self.min_x = float(data[6]) if len(data) >= 7 else self.min_x
+                        self.max_x = float(data[7]) if len(data) >= 8 else self.max_x
+                        self.min_y = float(data[8]) if len(data) >= 9 else self.min_y
+                        self.max_y = float(data[9]) if len(data) >= 10 else self.max_y
+                        doAutoRange = False
 
                 # Get signal names
                 while (line := df.readline()) != '':
@@ -694,7 +734,13 @@ class Recon(QMainWindow):
             self.actionSave.setEnabled(True)
             self.actionSaveAs.setEnabled(True)
             self.actionBuildPlot.setEnabled(True)
-            self.autoRange()
+            if doAutoRange:
+                self.autoRange()
+            else:
+                self.updateRange()
+            self.widgetTitle.setText(self.title)
+            self.widgetAxisX.setText(self.axisX)
+            self.widgetAxisY.setText(self.axisY)
             self.rebuildSignalsDock()
 
     def _save(self, filename: str) -> None:
@@ -704,7 +750,7 @@ class Recon(QMainWindow):
             lasttime = time()
 
             # write header
-            df.write(f'{filename},,\n\n')
+            df.write(f'"{filename}",,,"{self.title}","{self.axisX}","{self.axisY}",{self.min_x},{self.max_x},{self.min_y},{self.max_y}\n\n')
 
             # write signals descriptions
             for i in range(len(self.signals)):
@@ -746,22 +792,21 @@ class Recon(QMainWindow):
     def _update(self):
 
         self.figure.clear()
-        ax = self.figure.subplots()
+        ax: Axes = self.figure.subplots()
 
         for signal in self.signals:
             if signal.selected:
+                signal.update()
                 ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=0.25)
 
-        plt.title(self.title)
-        plt.xlabel(self.axisX)
-        plt.ylabel(self.axisY)
-        plt.minorticks_on()
-        plt.tight_layout()
-
         ax.axis([self.min_x, self.max_x, self.min_y, self.max_y])
+        ax.set_title(self.title)
+        ax.set_xlabel(self.axisX)
+        ax.set_ylabel(self.axisY)
         ax.legend(loc='best')
-        ax.grid(which='minor', linestyle=':')
-        ax.grid(which='major', linestyle='-')
+        ax.grid(b=True, which='major', linestyle='-')
+        ax.grid(b=True, which='minor', linestyle=':')
+        ax.minorticks_on()
 
         self.figure.tight_layout()
         self.figure.canvas.draw()
@@ -769,35 +814,30 @@ class Recon(QMainWindow):
         self.actionSavePlot.setEnabled(True)
         self.actionSavePlotAs.setEnabled(True)
 
-        print('finished')
-
     def _savePlot(self, filename: str) -> None:
         self.plotFileName = filename
         QSettings().setValue('default_plot_path', os.path.dirname(os.path.abspath(filename)))
 
-        fig = Figure()
-        ax = fig.subplots()
+        fig: Figure = Figure()
+        ax: Axes = fig.subplots()
 
         for signal in self.signals:
             if signal.selected:
                 ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=0.25)
 
-        plt.title(self.title)
-        plt.xlabel(self.axisX)
-        plt.ylabel(self.axisY)
-        plt.minorticks_on()
-        plt.tight_layout()
-
         ax.axis([self.min_x, self.max_x, self.min_y, self.max_y])
+        ax.set_title(self.title)
+        ax.set_xlabel(self.axisX)
+        ax.set_ylabel(self.axisY)
         ax.legend(loc='best')
-        ax.grid(which='minor', linestyle=':')
-        ax.grid(which='major', linestyle='-')
+        ax.grid(b=True, which='major', linestyle='-')
+        ax.grid(b=True, which='minor', linestyle=':')
+        ax.minorticks_on()
 
-        fig.set_size_inches(self.pageSize.width(), self.pageSize.height())
         fig.tight_layout()
-
+        fig.set_size_inches(self.pageSize.width(), self.pageSize.height())
         fig.savefig(filename, dpi=self.dpi)
-        print('finished')
+        fig.clf()
 
 
 if __name__ == "__main__":
