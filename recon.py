@@ -3,7 +3,7 @@
 # Copyright 2021 Oleksandr Kolodkin <alexandr.kolodkin@gmail.com>.
 # All rights reserved
 
-
+import math
 import sys
 import os
 import numpy
@@ -73,6 +73,29 @@ def writeCommaSeparatedLine(values: List[Any]) -> str:
     return ', '.join(result)
 
 
+class CheckBox(QWidget):
+    stateChanged = Signal(bool)
+
+    def __init__(self, state: Optional[bool] = False, parent: Optional[QWidget] = None) -> None:
+        super(CheckBox, self).__init__(parent)
+        self.setAutoFillBackground(True)
+        self.checkbox = QCheckBox('', self)
+        self.checkbox.setChecked(state)
+        self.checkbox.stateChanged.connect(self.stateChanged.emit)
+        self.setLayout(QHBoxLayout(self))
+        self.layout().addWidget(self.checkbox)
+        self.layout().setAlignment(Qt.AlignCenter)
+        self.layout().setMargin(0)
+        self.mousePressEvent = self.on_mousePressEvent
+
+    def on_mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton:
+            self.checkbox.setChecked(not self.checkbox.isChecked())
+
+    def setChecked(self, state: bool) -> None:
+        self.checkbox.setChecked(state)
+
+
 class ClicableLabel(QLabel):
     clicked = Signal()
 
@@ -106,7 +129,7 @@ class DoubleLineEdit(QLineEdit):
         self.textChanged.connect(self.onTextChanged)
 
     def onTextChanged(self, text: str) -> None:
-        value = float(text.replace(QLocale().decimalPoint(), '.'))
+        value = 0 if text == '' else float(text.replace(QLocale().decimalPoint(), '.'))
         self.valueChanged.emit(value)
 
     @Slot(int)
@@ -135,6 +158,7 @@ class AnalogSignal(QObject):
     def __init__(self, name: str = '', unit: str = 'V', data: List[float] = None) -> None:
         super(AnalogSignal, self).__init__()
         self.selected: bool = False
+        self.inverted: bool = False
         self.name: str = name
         self.unit: str = unit
         self.smooth: int = 1
@@ -160,7 +184,8 @@ class AnalogSignal(QObject):
 
     def getData(self) -> List[float]:
         result = self.data if self.smooth == 1 else self.smoothedData
-        return result if isclose(self.scale, 1.0, rtol=0.0001) else [v * self.scale for v in result]
+        result = [-v for v in result] if self.inverted else result
+        return result if math.isclose(self.scale, 1.0, abs_tol=0.0001) else [v * self.scale for v in result]
 
     def getName(self) -> str:
         if isclose(self.scale, 1.0, rtol=0.0001):
@@ -178,6 +203,9 @@ class AnalogSignal(QObject):
 
     def setSelected(self, selected: bool) -> None:
         self.selected = bool(selected)
+
+    def setInverted(self, inverted: bool) -> None:
+        self.inverted = inverted
 
     def setScale(self, scale: float) -> None:
         self.scale = float(scale)
@@ -427,10 +455,6 @@ class Recon(QMainWindow):
         self.dockSignals = QDockWidget(QCoreApplication.translate('SignalsDock', 'Signals'), self)
         self.dockSignals.setObjectName('DockSignals')
         self.dockSignalsWidget = QTableWidget(0, 8)
-        dockSignalsWidgetPalette = self.dockSignalsWidget.palette()
-        dockSignalsWidgetPalette.setBrush(QPalette.Highlight, QBrush(Qt.white))
-        dockSignalsWidgetPalette.setBrush(QPalette.HighlightedText, QBrush(Qt.black))
-        self.dockSignalsWidget.setPalette(dockSignalsWidgetPalette)
         self.dockSignalsWidget.setAutoFillBackground(True)
         self.dockSignalsWidget.setObjectName('DockSignalsWidget')
         self.dockSignalsWidget.setSelectionMode(QAbstractItemView.NoSelection)
@@ -438,6 +462,7 @@ class Recon(QMainWindow):
             QCoreApplication.translate('SignalsDock', 'Selected'),
             QCoreApplication.translate('SignalsDock', 'Name'),
             QCoreApplication.translate('SignalsDock', 'Unit'),
+            QCoreApplication.translate('SignalsDock', 'Inverted'),
             QCoreApplication.translate('SignalsDock', 'Smooth'),
             QCoreApplication.translate('SignalsDock', 'Scale'),
             QCoreApplication.translate('SignalsDock', 'Minimum'),
@@ -583,16 +608,9 @@ class Recon(QMainWindow):
         for i in range(len(self.signals)):
 
             # Checkbox
-            widget = QLabel('', self.dockSignalsWidget)
-            layout = QHBoxLayout(widget)
-            checkBox = QCheckBox('', widget)
-            checkBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-            layout.addWidget(checkBox)
-            layout.setAlignment(Qt.AlignCenter)
-            layout.setMargin(0)
-            checkBox.setChecked(self.signals[i].selected)
-            checkBox.stateChanged.connect(self.signals[i].setSelected)
-            self.dockSignalsWidget.setCellWidget(i, 0, widget)
+            widgetSelected = CheckBox(self.signals[i].selected, self.dockSignalsWidget)
+            widgetSelected.stateChanged.connect(self.signals[i].setSelected)
+            self.dockSignalsWidget.setCellWidget(i, 0, widgetSelected)
 
             # Signal name
             nameWidget = QLineEdit(self.dockSignalsWidget)
@@ -611,6 +629,11 @@ class Recon(QMainWindow):
             unitWidget.textChanged.connect(self.signals[i].setUnit)
             self.dockSignalsWidget.setCellWidget(i, 2, unitWidget)
 
+            # Inverted
+            invertedWidget = CheckBox(self.signals[i].inverted, self.dockSignalsWidget)
+            invertedWidget.stateChanged.connect(self.signals[i].setInverted)
+            self.dockSignalsWidget.setCellWidget(i, 3, invertedWidget)
+
             # Smooth level
             smoothWidget = QLineEdit(self.dockSignalsWidget)
             smoothWidget.setFrame(False)
@@ -621,16 +644,17 @@ class Recon(QMainWindow):
             smoothWidget.setAlignment(Qt.AlignCenter)
             smoothWidget.textChanged.connect(self.signals[i].setSmooth)
             smoothWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-            self.dockSignalsWidget.setCellWidget(i, 3, smoothWidget)
+            self.dockSignalsWidget.setCellWidget(i, 4, smoothWidget)
 
             # Scale
             scaleWidget = DoubleLineEdit(self.dockSignalsWidget)
+            scaleWidget.setRange(0, float('inf'))
             scaleWidget.setFrame(False)
             scaleWidget.setAlignment(Qt.AlignCenter)
             scaleWidget.setValue(self.signals[i].scale)
             scaleWidget.valueChanged.connect(self.signals[i].setScale)
             scaleWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-            self.dockSignalsWidget.setCellWidget(i, 4, scaleWidget)
+            self.dockSignalsWidget.setCellWidget(i, 5, scaleWidget)
 
             # Minimum
             minWidget = DoubleLineEdit(self.dockSignalsWidget)
@@ -638,7 +662,7 @@ class Recon(QMainWindow):
             minWidget.setReadOnly(True)
             minWidget.setValue(self.signals[i].minimum)
             minWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-            self.dockSignalsWidget.setCellWidget(i, 5, minWidget)
+            self.dockSignalsWidget.setCellWidget(i, 6, minWidget)
             self.signals[i].minimumChanged.connect(minWidget.setValue)
 
             # Maximum
@@ -647,7 +671,7 @@ class Recon(QMainWindow):
             maxWidget.setReadOnly(True)
             maxWidget.setValue(self.signals[i].maximum)
             maxWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-            self.dockSignalsWidget.setCellWidget(i, 6, maxWidget)
+            self.dockSignalsWidget.setCellWidget(i, 7, maxWidget)
             self.signals[i].maximumChanged.connect(maxWidget.setValue)
 
             # Color
@@ -660,7 +684,7 @@ class Recon(QMainWindow):
             palette.setColor(QPalette.Base, color)
             colorWidget.setPalette(palette)
             colorWidget.clicked.connect(self.signals[i]._color)
-            self.dockSignalsWidget.setCellWidget(i, 7, colorWidget)
+            self.dockSignalsWidget.setCellWidget(i, 8, colorWidget)
 
     def progressBegin(self, total: int) -> None:
         self.progressBar.setMaximum(total)
@@ -740,7 +764,7 @@ class Recon(QMainWindow):
     def _update_recent_list(self):
         settings: QSettings = QSettings()
         recent: List[str] = settings.value('recent', list())
-        # self.menuRecent.clear()
+        self.menuRecent.clear()
         self.actionsRecent = []
         for filename in recent:
             action = QAction(filename)
