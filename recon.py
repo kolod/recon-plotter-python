@@ -10,19 +10,18 @@ import numpy
 from distutils.util import strtobool
 from time import time
 from typing import Any, List, Optional
-from PySide2.QtGui import (QColor, QIcon, QValidator, QDoubleValidator, QIntValidator,
-                           QPalette, QMouseEvent, QBrush)
+from PySide2.QtGui import (QColor, QCursor, QIcon, QValidator, QDoubleValidator, QIntValidator,
+                           QPalette, QMouseEvent)
 from PySide2.QtCore import (qVersion, QObject, QSizeF, Signal, QCoreApplication, QLocale,
                             QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot)
 from PySide2.QtWidgets import (QApplication, QCheckBox, QAbstractItemView, QComboBox, QFormLayout,
                                QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction,
-                               QDockWidget, QLabel, QMenu, QProgressBar, QSizePolicy, QGridLayout, QTableWidget,
+                               QDockWidget, QLabel, QMenu, QProgressBar, QPushButton, QSizePolicy, QGridLayout, QTableWidget,
                                QWidget, QStyleFactory, QColorDialog)
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from numpy.core.numeric import isclose
 
 if qVersion() >= "5.":
     from matplotlib.backends.backend_qt5agg import FigureCanvas
@@ -188,7 +187,7 @@ class AnalogSignal(QObject):
         return result if math.isclose(self.scale, 1.0, abs_tol=0.0001) else [v * self.scale for v in result]
 
     def getName(self) -> str:
-        if isclose(self.scale, 1.0, rtol=0.0001):
+        if math.isclose(self.scale, 1.0, abs_tol=0.0001):
             return self.name
         return f'{self.name} × {self.scale:0.3g}'
 
@@ -359,6 +358,8 @@ class Recon(QMainWindow):
 
         self.figure.canvas.mpl_connect('key_press_event', self._key)
         self.figure.canvas.mpl_connect('motion_notify_event', self._mouse_move)
+        self.figure.canvas.mpl_connect('axes_enter_event', self._mouse_enter)
+        self.figure.canvas.mpl_connect('axes_leave_event', self._mouse_leave)
 
         # Add plot display
         self.plot = FigureCanvas(self.figure)
@@ -442,11 +443,21 @@ class Recon(QMainWindow):
         self.widgetSize.addItem(portrate.format('A4'), QSizeF(8.268, 11.693))
         self.widgetSize.addItem(portrate.format('A5'), QSizeF(5.827, 8.268))
 
+        # Align center
+        self.widgetSize.setEditable(True)
+        self.widgetSize.lineEdit().setReadOnly(True)
+        self.widgetSize.lineEdit().setAlignment(Qt.AlignCenter)
         for i in range(self.widgetSize.count()):
             self.widgetSize.setItemData(i, Qt.AlignCenter, Qt.TextAlignmentRole)
 
         self.widgetSize.currentIndexChanged.connect(self.setPageSize)
         self.plotSettingsLayout.addRow(self.labelSize, self.widgetSize)
+
+        # Update button
+        self.widgetUpdate = QPushButton(QCoreApplication.translate('PlotSettingsDock', 'Update Plot'))
+        self.widgetUpdate.setDisabled(True)
+        self.widgetUpdate.clicked.connect(self._update)
+        self.plotSettingsLayout.addWidget(self.widgetUpdate)
 
         self.plotSettingsDock.setWidget(self.plotSettingsWidget)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.plotSettingsDock)
@@ -454,7 +465,7 @@ class Recon(QMainWindow):
         # Signals Dock
         self.dockSignals = QDockWidget(QCoreApplication.translate('SignalsDock', 'Signals'), self)
         self.dockSignals.setObjectName('DockSignals')
-        self.dockSignalsWidget = QTableWidget(0, 8)
+        self.dockSignalsWidget = QTableWidget(0, 9)
         self.dockSignalsWidget.setAutoFillBackground(True)
         self.dockSignalsWidget.setObjectName('DockSignalsWidget')
         self.dockSignalsWidget.setSelectionMode(QAbstractItemView.NoSelection)
@@ -738,7 +749,17 @@ class Recon(QMainWindow):
         dialog.fileSelected.connect(self._savePlot)
         dialog.open()
 
-    def _mouse_move(self, event):
+    def _mouse_enter(self, event) -> None:
+        cursor = self.plot.cursor()
+        cursor.setShape(Qt.CrossCursor)
+        self.plot.setCursor(cursor)
+
+    def _mouse_leave(self, event) -> None:
+        cursor = self.plot.cursor()
+        cursor.setShape(Qt.ArrowCursor)
+        self.plot.setCursor(cursor)
+
+    def _mouse_move(self, event) -> None:
         if not event.inaxes:
             self.statusBar().clearMessage()
         else:
@@ -901,6 +922,7 @@ class Recon(QMainWindow):
             self.actionSaveAs.setEnabled(True)
             self.actionBuildPlot.setEnabled(True)
             self.actionAutoRange.setEnabled(True)
+            self.widgetUpdate.setEnabled(True)
             self.widgetTitle.setText(self.title)
             self.widgetAxisX.setText(self.axisX)
             self.widgetAxisY.setText(self.axisY)
