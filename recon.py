@@ -10,7 +10,7 @@ import numpy
 from distutils.util import strtobool
 from time import time
 from typing import Any, List, Optional
-from PySide2.QtGui import (QColor, QValidator, QDoubleValidator, QIntValidator,
+from PySide2.QtGui import (QColor, QIcon, QValidator, QDoubleValidator, QIntValidator,
                            QPalette, QMouseEvent, QBrush)
 from PySide2.QtCore import (qVersion, QObject, QSizeF, Signal, QCoreApplication, QLocale,
                             QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot)
@@ -452,47 +452,55 @@ class Recon(QMainWindow):
 
         # File actions
         self.actionOpen = QAction(QCoreApplication.translate('Menu', '&Open...'), self)
+        self.actionOpen.setIcon(QIcon('icons/document-open-symbolic.svg'))
         self.actionOpen.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+O'))
         self.actionOpen.setStatusTip(QCoreApplication.translate('Menu', 'Open the recon data in the text format'))
         self.actionOpen.triggered.connect(self.openData)
 
         self.actionSave = QAction(QCoreApplication.translate('Menu', '&Save'), self)
+        self.actionSave.setIcon(QIcon('icons/document-save-symbolic.svg'))
         self.actionSave.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+S'))
         self.actionSave.setStatusTip(QCoreApplication.translate('Menu', 'Save the recon data in the text format'))
         self.actionSave.setDisabled(True)
         self.actionSave.triggered.connect(self.saveData)
 
         self.actionSaveAs = QAction(QCoreApplication.translate('Menu', 'Save &as...'), self)
+        self.actionSaveAs.setIcon(QIcon('icons/document-save-as-symbolic.svg'))
         self.actionSaveAs.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Shift+S'))
         self.actionSaveAs.setDisabled(True)
         self.actionSaveAs.setStatusTip(QCoreApplication.translate('Menu', 'Save the recon data in the text format as...'))
         self.actionSaveAs.triggered.connect(self.saveDataAs)
 
         self.actionExit = QAction(QCoreApplication.translate('Menu', '&Exit'), self)
+        self.actionExit.setIcon(QIcon('icons/window-close-symbolic.svg'))
         self.actionExit.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Q'))
         self.actionExit.setStatusTip(QCoreApplication.translate('Menu', 'Exit application'))
         self.actionExit.triggered.connect(self.close)
 
         # Plot actions
         self.actionAutoRange = QAction(QCoreApplication.translate('Menu', 'Fit to signal &range'))
+        self.actionAutoRange.setIcon(QIcon('icons/zoom-fit-best-symbolic.svg'))
         self.actionAutoRange.setShortcut(QCoreApplication.translate('Menu', 'F4'))
         self.actionAutoRange.setStatusTip(QCoreApplication.translate('Menu', 'Recalculate signals limits & update plot ranges'))
         self.actionAutoRange.setDisabled(True)
         self.actionAutoRange.triggered.connect(self.autoRange)
 
         self.actionBuildPlot = QAction(QCoreApplication.translate('Menu', '&Update'), self)
+        self.actionBuildPlot.setIcon(QIcon('icons/view-refresh-symbolic.svg'))
         self.actionBuildPlot.setShortcut(QCoreApplication.translate('Menu', 'F5'))
         self.actionBuildPlot.setStatusTip(QCoreApplication.translate('Menu', 'Update plot'))
         self.actionBuildPlot.setDisabled(True)
         self.actionBuildPlot.triggered.connect(self._update)
 
         self.actionSavePlot = QAction(QCoreApplication.translate('Menu', '&Save plot'), self)
+        self.actionSavePlot.setIcon(QIcon('icons/document-save-symbolic.svg'))
         self.actionSavePlot.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Alt+S'))
         self.actionSavePlot.setStatusTip(QCoreApplication.translate('Menu', 'Save plot'))
         self.actionSavePlot.setDisabled(True)
         self.actionSavePlot.triggered.connect(self.savePlot)
 
         self.actionSavePlotAs = QAction(QCoreApplication.translate('Menu', 'Save plot &as...'), self)
+        self.actionSavePlotAs.setIcon(QIcon('icons/document-save-as-symbolic.svg'))
         self.actionSavePlotAs.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Alt+Shift+S'))
         self.actionSavePlotAs.setStatusTip(QCoreApplication.translate('Menu', 'Save plot as...'))
         self.actionSavePlotAs.setDisabled(True)
@@ -506,13 +514,21 @@ class Recon(QMainWindow):
         self.actionSettingsDock.setStatusTip(QCoreApplication.translate('Menu', 'Show/hide plot settings window'))
 
         self.actionFullScreen = QAction(QCoreApplication.translate('Menu', '&Full screan'))
+        self.actionFullScreen.setIcon(QIcon('icons/view-fullscreen-symbolic.svg'))
         self.actionFullScreen.setStatusTip(QCoreApplication.translate('Menu', 'Show plot in full screan'))
         self.actionFullScreen.setShortcut(QCoreApplication.translate('Menu', 'F11'))
         self.actionFullScreen.triggered.connect(self._fullscreen)
 
         # Help actions
         self.actionAboutQt = QAction(QCoreApplication.translate('Menu', 'About Qt...'), self)
+        self.actionAboutQt.setIcon(QIcon('icons/help-about-symbolic.svg'))
         self.actionAboutQt.triggered.connect(QApplication.aboutQt)
+
+        self.actionHelp = QAction(QCoreApplication.translate('Menu', 'Show manual'))
+        self.actionHelp.setIcon(QIcon('icons/help-contents-symbolic.svg'))
+        self.actionHelp.setShortcut(QCoreApplication.translate('Menu', 'F1'))
+        self.actionHelp.setStatusTip(QCoreApplication.translate('Menu', 'Show application manual'))
+        self.actionHelp.triggered.connect(self._help)
 
         menubar = self.menuBar()
 
@@ -532,7 +548,7 @@ class Recon(QMainWindow):
         menuView.addAction(self.actionFullScreen)
 
         menuHelp = menubar.addMenu(QCoreApplication.translate('Menu', '&Help'))
-        menuHelp.addAction(self.actionAboutQt)
+        menuHelp.addActions([self.actionHelp, self.actionAboutQt])
 
     def restoreSession(self) -> None:
         settings = QSettings()
@@ -715,7 +731,11 @@ class Recon(QMainWindow):
             self._fullscreen()
 
     @Slot()
-    @Slot(bool)
+    def _help(self):
+        os.startfile(QCoreApplication.translate('Help', '"manual\\Recon Plotter Manual.pdf"'))
+
+    @ Slot()
+    @ Slot(bool)
     def _fullscreen(self):
         if self.plot.isFullScreen():
             self.plot.setWindowFlags(Qt.SubWindow)
