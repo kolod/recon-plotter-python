@@ -16,7 +16,7 @@ from PySide2.QtCore import (qVersion, QObject, QSizeF, Signal, QCoreApplication,
                             QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot)
 from PySide2.QtWidgets import (QApplication, QCheckBox, QAbstractItemView, QComboBox, QFormLayout,
                                QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction,
-                               QDockWidget, QLabel, QProgressBar, QSizePolicy, QGridLayout, QTableWidget,
+                               QDockWidget, QLabel, QMenu, QProgressBar, QSizePolicy, QGridLayout, QTableWidget,
                                QWidget, QStyleFactory, QColorDialog)
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -214,6 +214,7 @@ class Recon(QMainWindow):
         self.progressBar: QProgressBar = None
         self.dockSignals: QDockWidget = None
         self.dockSignalsWidget: QTableWidget = None
+        self.menuRecent: QMenu = None
         self.title: str = ''
         self.device: str = ''
         self.originalFileName: str = ''
@@ -231,6 +232,7 @@ class Recon(QMainWindow):
         super().__init__()
         self.initialize()
         self.restoreSession()
+        self._update_recent_list()
 
     @Slot(int)
     def setPageSize(self, index: int) -> None:
@@ -532,8 +534,13 @@ class Recon(QMainWindow):
 
         menubar = self.menuBar()
 
+        self.menuRecent = QMenu(QCoreApplication.translate('Menu', 'Open &recent'))
+        self.menuRecent.setIcon(QIcon('icons/document-open-recent-symbolic.svg'))
+
         menuFile = menubar.addMenu(QCoreApplication.translate('Menu', '&File'))
         menuFile.addActions([self.actionOpen, self.actionSave, self.actionSaveAs])
+        menuFile.addSeparator()
+        menuFile.addMenu(self.menuRecent)
         menuFile.addSeparator()
         menuFile.addAction(self.actionExit)
 
@@ -681,10 +688,7 @@ class Recon(QMainWindow):
             print(e)
 
     def saveData(self):
-        if os.path.isfile(self.dataFileName):
-            self._save(self.dataFileName)
-        else:
-            self.saveDataAs()
+        os.path.isfile(self.dataFileName) if self._save(self.dataFileName) else self.saveDataAs()
 
     def saveDataAs(self):
         try:
@@ -699,10 +703,7 @@ class Recon(QMainWindow):
             print(e)
 
     def savePlot(self) -> None:
-        if os.path.isfile(self.plotFileName):
-            self.savePlotAs()
-        else:
-            self._savePlot(self.plotFileName)
+        self.savePlotAs() if os.path.isfile(self.plotFileName) else self._savePlot(self.plotFileName)
 
     def savePlotAs(self) -> None:
         dialog = QFileDialog(self)
@@ -726,13 +727,38 @@ class Recon(QMainWindow):
                         msg += f',  {signal.name:s}: {signal.data[i]:g} [{signal.unit}]'
             self.statusBar().showMessage(msg)
 
-    def _key(self, event):
-        if event.key in ['escape', 'f11']:
-            self._fullscreen()
+    def _add_to_recent(self, filename: str):
+        settings: QSettings = QSettings()
+        last_recent: List[str] = settings.value('recent', list())
+        new_recent: List[str] = [filename]
+        for i in range(min(len(last_recent), 10)):
+            if last_recent[i] not in new_recent:
+                new_recent.append(last_recent[i])
+        settings.setValue('recent', new_recent)
+        self._update_recent_list()
+
+    def _update_recent_list(self):
+        settings: QSettings = QSettings()
+        recent: List[str] = settings.value('recent', list())
+        # self.menuRecent.clear()
+        self.actionsRecent = []
+        for filename in recent:
+            action = QAction(filename)
+            action.triggered.connect(self._open_recent)
+            self.actionsRecent.append(action)
+        self.menuRecent.addActions(self.actionsRecent)
+
+    def _open_recent(self):
+        action: QAction = self.sender()
+        self._load(action.text())
 
     @Slot()
     def _help(self):
         os.startfile(QCoreApplication.translate('Help', '"manual\\Recon Plotter Manual.pdf"'))
+
+    def _key(self, event):
+        if event.key in ['escape', 'f11']:
+            self._fullscreen()
 
     @ Slot()
     @ Slot(bool)
@@ -763,6 +789,7 @@ class Recon(QMainWindow):
 
             # Save path for next use
             QSettings().setValue('default_data_path', os.path.dirname(os.path.abspath(filename)))
+            self._add_to_recent(filename)
 
             # Change window title
             self.setWindowTitle(QCoreApplication.translate('Main', 'Recon plotter - {0}').format(self.dataFileName))
@@ -859,6 +886,8 @@ class Recon(QMainWindow):
 
     def _save(self, filename: str) -> None:
         with open(filename, 'w', encoding='cp1251') as df:
+
+            self._add_to_recent(filename)
 
             self.progressBegin(len(self.times))
             lasttime = time()
