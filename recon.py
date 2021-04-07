@@ -3,25 +3,36 @@
 # Copyright 2021 Oleksandr Kolodkin <alexandr.kolodkin@gmail.com>.
 # All rights reserved
 
-import math
-import sys
 import os
+import sys
+import math
 import numpy
-from distutils.util import strtobool
+
 from time import time
 from typing import Any, List, Optional
-from PySide2.QtGui import (QColor, QCursor, QIcon, QValidator, QDoubleValidator, QIntValidator,
-                           QPalette, QMouseEvent)
-from PySide2.QtCore import (qVersion, QObject, QSizeF, Signal, QCoreApplication, QLocale,
-                            QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot)
-from PySide2.QtWidgets import (QApplication, QCheckBox, QAbstractItemView, QComboBox, QFormLayout,
-                               QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction,
-                               QDockWidget, QLabel, QMenu, QProgressBar, QPushButton, QSizePolicy, QGridLayout, QTableWidget,
-                               QWidget, QStyleFactory, QColorDialog)
-import matplotlib as mpl
-import matplotlib.pyplot as plt
+from distutils.util import strtobool
+
+# Qt
+from PySide2.QtGui import (
+    QColor, QCursor, QIcon, QValidator, QDoubleValidator, QIntValidator,
+    QPalette, QMouseEvent)
+from PySide2.QtCore import (
+    qVersion, QObject, QSizeF, Signal, QCoreApplication, QLocale,
+    QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot)
+from PySide2.QtWidgets import (
+    QApplication, QCheckBox, QAbstractItemView, QComboBox, QFormLayout,
+    QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction,
+    QDockWidget, QLabel, QMenu, QProgressBar, QPushButton, QSizePolicy, QGridLayout,
+    QTableWidget,  QWidget, QStyleFactory, QColorDialog)
+
+# Matplotlib
+import matplotlib
+import matplotlib.pyplot
+import matplotlib.widgets
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from matplotlib.backend_bases import MouseEvent, LocationEvent, KeyEvent
+from matplotlib.patches import Rectangle
 
 if qVersion() >= "5.":
     from matplotlib.backends.backend_qt5agg import FigureCanvas
@@ -142,6 +153,10 @@ class DoubleLineEdit(QLineEdit):
         validator.setBottom(bottom)
         validator.setTop(top)
 
+    def value(self) -> float:
+        text = self.text()
+        return 0 if text == '' else float(text.replace(QLocale().decimalPoint(), '.'))
+
     @Slot(float)
     def setValue(self, value: float) -> None:
         if value is None:
@@ -255,6 +270,8 @@ class Recon(QMainWindow):
         self.pageSize: QSizeF = None
         self.figure: Figure = Figure()
         self.ax: Axes = None
+        self.plotConfigurations = []
+        self.lineWidth = 0.5
 
         super().__init__()
         self.initialize()
@@ -282,20 +299,32 @@ class Recon(QMainWindow):
         self.axisY = axisY
 
     @Slot(float)
-    def setMinX(self, value: float) -> None:
-        self.min_x = value
+    def setLineWidth(self, width: float) -> None:
+        self.lineWidth = width
 
     @Slot(float)
-    def setMinY(self, value: float) -> None:
-        self.min_y = value
+    def setMinX(self, value: float) -> None:
+        self.min_x = value
+        if self.widgetMinX.value() != value:
+            self.widgetMinX.setValue(value)
 
     @Slot(float)
     def setMaxX(self, value: float) -> None:
         self.max_x = value
+        if self.widgetMaxX.value() != value:
+            self.widgetMaxX.setValue(value)
+
+    @Slot(float)
+    def setMinY(self, value: float) -> None:
+        self.min_y = value
+        if self.widgetMinY.value() != value:
+            self.widgetMinY.setValue(value)
 
     @Slot(float)
     def setMaxY(self, value: float) -> None:
         self.max_y = value
+        if self.widgetMaxY.value() != value:
+            self.widgetMaxY.setValue(value)
 
     def timeToIndex(self, time: float) -> int:
         if len(self.times) > 3:
@@ -421,6 +450,14 @@ class Recon(QMainWindow):
         self.widgetMaxY.setDecimals(3)
         self.widgetMaxY.valueChanged.connect(self.setMaxY)
         self.plotSettingsLayout.addRow(self.labelMaxY, self.widgetMaxY)
+
+        # Line width
+        self.labelLineWidth = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Line width:'), self.plotSettingsWidget)
+        self.labelLineWidth = DoubleLineEdit(self.plotSettingsWidget)
+        self.labelLineWidth.setDecimals(2)
+        self.labelLineWidth.setValue(self.lineWidth)
+        self.labelLineWidth.valueChanged.connect(self.setLineWidth)
+        self.plotSettingsLayout.addRow(self.labelMaxY, self.labelLineWidth)
 
         # DPI
         self.labelDPI = QLabel(QCoreApplication.translate('PlotSettingsDock', 'DPI:'), self.plotSettingsWidget)
@@ -749,28 +786,38 @@ class Recon(QMainWindow):
         dialog.fileSelected.connect(self._savePlot)
         dialog.open()
 
-    def _mouse_enter(self, event) -> None:
-        cursor = self.plot.cursor()
-        cursor.setShape(Qt.CrossCursor)
-        self.plot.setCursor(cursor)
+    def _select_callback(self, eclick, erelease):
+        self.setMinX(min(eclick.xdata, erelease.xdata))
+        self.setMaxX(max(eclick.xdata, erelease.xdata))
+        self.setMinY(min(eclick.ydata, erelease.ydata))
+        self.setMaxY(max(eclick.ydata, erelease.ydata))
+        self._update()
+        pass
 
-    def _mouse_leave(self, event) -> None:
-        cursor = self.plot.cursor()
-        cursor.setShape(Qt.ArrowCursor)
-        self.plot.setCursor(cursor)
-
-    def _mouse_move(self, event) -> None:
+    def _mouse_move(self, event: MouseEvent) -> None:
         if not event.inaxes:
             self.statusBar().clearMessage()
         else:
-            x = event.xdata
-            msg = QCoreApplication.translate('status', 'Time: {0:g} [s]').format(x)
-            i = self.timeToIndex(x)
-            if i >= 0:
-                for signal in self.signals:
-                    if signal.selected:
-                        msg += f',  {signal.name:s}: {signal.data[i]:g} [{signal.unit}]'
-            self.statusBar().showMessage(msg)
+            self._show_status_message(event.xdata)
+
+    def _show_status_message(self, x: float) -> None:
+        msg = QCoreApplication.translate('status', 'Time: {0:g} [s]').format(x)
+        i = self.timeToIndex(x)
+        if i >= 0:
+            for signal in self.signals:
+                if signal.selected:
+                    msg += f',  {signal.name:s}: {signal.data[i]:g} [{signal.unit}]'
+        self.statusBar().showMessage(msg)
+
+    def _mouse_enter(self, event: LocationEvent) -> None:
+        cursor: QCursor = self.plot.cursor()
+        cursor.setShape(Qt.CrossCursor)
+        self.plot.setCursor(cursor)
+
+    def _mouse_leave(self, event: LocationEvent) -> None:
+        cursor: QCursor = self.plot.cursor()
+        cursor.setShape(Qt.ArrowCursor)
+        self.plot.setCursor(cursor)
 
     def _add_to_recent(self, filename: str):
         settings: QSettings = QSettings()
@@ -801,7 +848,7 @@ class Recon(QMainWindow):
     def _help(self):
         os.startfile(QCoreApplication.translate('Help', '"manual\\Recon Plotter Manual.pdf"'))
 
-    def _key(self, event):
+    def _key(self, event: KeyEvent):
         if event.key in ['escape', 'f11']:
             self._fullscreen()
 
@@ -822,7 +869,7 @@ class Recon(QMainWindow):
             self._update()
 
     def _set_colors(self):
-        colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        colors = matplotlib.pyplot.rcParams['axes.prop_cycle'].by_key()['color']
         for i in range(len(self.signals)):
             if self.signals[i].color is None:
                 self.signals[i].color = colors[i % len(colors)]
@@ -988,14 +1035,17 @@ class Recon(QMainWindow):
                 # add data row
                 df.write(f'{i:10d},{self.times[i]:15.6f},')
                 for j in range(len(self.signals)):
-                    df.write(f'{self.signals[j].data[i]:10.3f},')
+                    if self.signals[j].inverted:
+                        df.write(f'{-self.signals[j].data[i]+0:10.3f},')
+                    else:
+                        df.write(f'{self.signals[j].data[i]:10.3f},')
                 df.write('\n')
 
             self.progressEnd()
 
             # Change window title
             self.dataFileName = filename
-            self.setWindowTitle(QCoreApplication.translate('Main', 'Recon plotter - {0}').format(self.filename))
+            self.setWindowTitle(QCoreApplication.translate('Main', 'Recon plotter - {0}').format(self.dataFileName))
 
     def _update(self):
 
@@ -1006,7 +1056,7 @@ class Recon(QMainWindow):
         for signal in self.signals:
             if signal.selected:
                 signal.update()
-                self.ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=0.25, color=signal.color)
+                self.ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=1, color=signal.color)
                 addLegend = True
 
         self.ax.axis([self.min_x, self.max_x, self.min_y, self.max_y])
@@ -1018,6 +1068,15 @@ class Recon(QMainWindow):
         self.ax.grid(b=True, which='major', linestyle='-')
         self.ax.grid(b=True, which='minor', linestyle=':')
         self.ax.minorticks_on()
+
+        self.selector = matplotlib.widgets.RectangleSelector(
+            ax=self.ax,
+            onselect=self._select_callback,
+            drawtype='box',
+            useblit=True,
+            button=[matplotlib.backend_bases.MouseButton.RIGHT],
+            rectprops=dict(facecolor="red", edgecolor="black", alpha=0.2, fill=True)
+        )
 
         self.figure.tight_layout()
         self.figure.canvas.draw()
@@ -1056,7 +1115,7 @@ if __name__ == "__main__":
     print(f'Qt version: {qVersion()}')
 
     # Increase matplotlib limit
-    mpl.rcParams['agg.path.chunksize'] = 100000
+    matplotlib.rcParams['agg.path.chunksize'] = 100000
 
     app = QApplication(sys.argv)
     app.setOrganizationName('Oleksandr Kolodkin')
