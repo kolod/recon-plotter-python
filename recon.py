@@ -262,6 +262,16 @@ class AnalogSignal(QObject):
             self.color = color.name()
 
 
+class Range(object):
+
+    def __init__(self, left: float = 0, right: float = 1.0, bottom: float = -1.0, top: float = 1.0) -> None:
+        self.top = top
+        self.bottom = bottom
+        self.left = left
+        self.right = right
+        super().__init__()
+
+
 class Recon(QMainWindow):
 
     def __init__(self) -> None:
@@ -279,15 +289,11 @@ class Recon(QMainWindow):
         self.originalFileName: str = ''
         self.axisX: str = ''
         self.axisY: str = ''
-        self.min_x: float = None
-        self.min_y: float = None
-        self.max_x: float = None
-        self.max_y: float = None
+        self.range: Range = Range()
         self.dpi: float = None
         self.pageSize: QSizeF = None
         self.figure: Figure = Figure()
         self.ax: Axes = None
-        self.plotConfigurations = []
         self.lineWidth = 0.5
 
         super().__init__()
@@ -320,28 +326,28 @@ class Recon(QMainWindow):
         self.lineWidth = width
 
     @Slot(float)
-    def setMinX(self, value: float) -> None:
-        self.min_x = value
-        if self.widgetMinX.value() != value:
-            self.widgetMinX.setValue(value)
+    def setLeft(self, value: float) -> None:
+        self.range.left = value
+        if self.widgetLeft.value() != value:
+            self.widgetLeft.setValue(value)
 
     @Slot(float)
-    def setMaxX(self, value: float) -> None:
-        self.max_x = value
-        if self.widgetMaxX.value() != value:
-            self.widgetMaxX.setValue(value)
+    def setRight(self, value: float) -> None:
+        self.range.right = value
+        if self.widgetRight.value() != value:
+            self.widgetRight.setValue(value)
 
     @Slot(float)
-    def setMinY(self, value: float) -> None:
-        self.min_y = value
-        if self.widgetMinY.value() != value:
-            self.widgetMinY.setValue(value)
+    def setBottom(self, value: float) -> None:
+        self.range.bottom = value
+        if self.widgetBottom.value() != value:
+            self.widgetBottom.setValue(value)
 
     @Slot(float)
-    def setMaxY(self, value: float) -> None:
-        self.max_y = value
-        if self.widgetMaxY.value() != value:
-            self.widgetMaxY.setValue(value)
+    def setTop(self, value: float) -> None:
+        self.range.top = value
+        if self.widgetTop.value() != value:
+            self.widgetTop.setValue(value)
 
     def timeToIndex(self, time: float) -> int:
         if len(self.times) > 3:
@@ -362,39 +368,41 @@ class Recon(QMainWindow):
         if len(self.times) and len(self.signals):
 
             # X range
-            self.min_x = 0
-            self.max_x = self.times[-1]
+            left = 0
+            right = self.times[-1]
 
             # Y range
-            self.min_y = float('inf')
-            self.max_y = float('-inf')
+            bottom = float('inf')
+            top = float('-inf')
 
             for signal in self.signals:
                 if self.isSignalsNotSelected() or signal.selected:
                     signal.update()
-                    self.min_y = min(self.min_y, signal.minimum)
-                    self.max_y = max(self.max_y, signal.maximum)
+                    bottom = min(bottom, signal.minimum)
+                    top = max(top, signal.maximum)
 
-            self.min_x = prettyFloor(self.min_x)
-            self.max_x = prettyCeil(self.max_x)
-            self.min_y = prettyFloor(self.min_y)
-            self.max_y = prettyCeil(self.max_y)
+            self.range = Range(
+                left=prettyFloor(left),
+                right=prettyCeil(right),
+                bottom=prettyFloor(bottom),
+                top=prettyCeil(top)
+            )
 
             self.updateRange()
             self._update()
 
     def updateRange(self):
         # Update validators
-        self.widgetMinX.setRange(self.min_x, self.max_x)
-        self.widgetMaxX.setRange(self.min_x, self.max_x)
-        self.widgetMinY.setRange(self.min_y, self.max_y)
-        self.widgetMaxY.setRange(self.min_y, self.max_y)
+        # self.widgetMinX.setRange(self.range.left, self.range.right)
+        # self.widgetMaxX.setRange(self.range.left, self.range.right)
+        # self.widgetMinY.setRange(self.range.bottom, self.range.top)
+        # self.widgetMaxY.setRange(self.range.bottom, self.range.top)
 
         # Update range
-        self.widgetMinX.setValue(self.min_x)
-        self.widgetMaxX.setValue(self.max_x)
-        self.widgetMinY.setValue(self.min_y)
-        self.widgetMaxY.setValue(self.max_y)
+        self.widgetLeft.setValue(self.range.left)
+        self.widgetRight.setValue(self.range.right)
+        self.widgetBottom.setValue(self.range.bottom)
+        self.widgetTop.setValue(self.range.top)
 
     def initialize(self) -> None:
         self.setWindowTitle('Recon plotter')
@@ -445,32 +453,32 @@ class Recon(QMainWindow):
         self.plotSettingsLayout.addRow(self.labelAxisY, self.widgetAxisY)
 
         # Minimum X
-        self.labelMinX = QLabel(QCoreApplication.translate('PlotSettingsDock', 'X from:'), self.plotSettingsWidget)
-        self.widgetMinX = DoubleLineEdit(self.plotSettingsWidget)
-        self.widgetMinX.setDecimals(3)
-        self.widgetMinX.valueChanged.connect(self.setMinX)
-        self.plotSettingsLayout.addRow(self.labelMinX, self.widgetMinX)
+        self.labelLeft = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Left:'), self.plotSettingsWidget)
+        self.widgetLeft = DoubleLineEdit(self.plotSettingsWidget)
+        self.widgetLeft.setDecimals(3)
+        self.widgetLeft.valueChanged.connect(self.setLeft)
+        self.plotSettingsLayout.addRow(self.labelLeft, self.widgetLeft)
 
         # Maximum X
-        self.labelMaxX = QLabel(QCoreApplication.translate('PlotSettingsDock', 'X to:'), self.plotSettingsWidget)
-        self.widgetMaxX = DoubleLineEdit(self.plotSettingsWidget)
-        self.widgetMaxX.setDecimals(3)
-        self.widgetMaxX.valueChanged.connect(self.setMaxX)
-        self.plotSettingsLayout.addRow(self.labelMaxX, self.widgetMaxX)
+        self.labelRight = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Right:'), self.plotSettingsWidget)
+        self.widgetRight = DoubleLineEdit(self.plotSettingsWidget)
+        self.widgetRight.setDecimals(3)
+        self.widgetRight.valueChanged.connect(self.setRight)
+        self.plotSettingsLayout.addRow(self.labelRight, self.widgetRight)
 
         # Minimum Y
-        self.labelMinY = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Y from:'), self.plotSettingsWidget)
-        self.widgetMinY = DoubleLineEdit(self.plotSettingsWidget)
-        self.widgetMinY.setDecimals(3)
-        self.widgetMinY.valueChanged.connect(self.setMinY)
-        self.plotSettingsLayout.addRow(self.labelMinY, self.widgetMinY)
+        self.labelBottom = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Bottom:'), self.plotSettingsWidget)
+        self.widgetBottom = DoubleLineEdit(self.plotSettingsWidget)
+        self.widgetBottom.setDecimals(3)
+        self.widgetBottom.valueChanged.connect(self.setBottom)
+        self.plotSettingsLayout.addRow(self.labelBottom, self.widgetBottom)
 
         # Maximum Y
-        self.labelMaxY = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Y to:'), self.plotSettingsWidget)
-        self.widgetMaxY = DoubleLineEdit(self.plotSettingsWidget)
-        self.widgetMaxY.setDecimals(3)
-        self.widgetMaxY.valueChanged.connect(self.setMaxY)
-        self.plotSettingsLayout.addRow(self.labelMaxY, self.widgetMaxY)
+        self.labelTop = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Top:'), self.plotSettingsWidget)
+        self.widgetTop = DoubleLineEdit(self.plotSettingsWidget)
+        self.widgetTop.setDecimals(3)
+        self.widgetTop.valueChanged.connect(self.setTop)
+        self.plotSettingsLayout.addRow(self.labelTop, self.widgetTop)
 
         # Line width
         self.labelLineWidth = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Line width:'), self.plotSettingsWidget)
@@ -775,13 +783,13 @@ class Recon(QMainWindow):
             dialog.setDirectory(QSettings().value('default_data_path', QStandardPaths.standardLocations(QStandardPaths.DocumentsLocation)[0]))
             dialog.setNameFilter(QCoreApplication.translate('FileDialog', 'Recon data files(*.txt)'))
             dialog.setWindowTitle(QCoreApplication.translate('FileDialog', 'Open recon data file'))
-            dialog.fileSelected.connect(self._load)
+            dialog.fileSelected.connect(self._loadReconText)
             dialog.open()
         except Exception as e:
             print(e)
 
     def saveData(self):
-        os.path.isfile(self.dataFileName) if self._save(self.dataFileName) else self.saveDataAs()
+        os.path.isfile(self.dataFileName) if self._saveReconText(self.dataFileName) else self.saveDataAs()
 
     def saveDataAs(self):
         try:
@@ -790,28 +798,31 @@ class Recon(QMainWindow):
             dialog.setDirectory(QSettings().value('default_data_path', QStandardPaths.standardLocations(QStandardPaths.DocumentsLocation)[0]))
             dialog.setNameFilter(QCoreApplication.translate('FileDialog', 'Recon data files(*.txt)'))
             dialog.setWindowTitle(QCoreApplication.translate('FileDialog', 'Save recon data file'))
-            dialog.fileSelected.connect(self._save)
+            dialog.fileSelected.connect(self._saveReconText)
             dialog.open()
         except Exception as e:
             print(e)
 
     def savePlot(self) -> None:
-        self.savePlotAs() if os.path.isfile(self.plotFileName) else self._savePlot(self.plotFileName)
+        if hasattr(self, 'plotFileName') and self.plotFileName is not None and os.path.isfile(self.plotFileName):
+            self._savePlot(self.plotFileName)
+        else:
+            self.savePlotAs()
 
     def savePlotAs(self) -> None:
         dialog = QFileDialog(self)
         dialog.setAcceptMode(QFileDialog.AcceptSave)
         dialog.setDirectory(QSettings().value('default_plot_path', QStandardPaths.standardLocations(QStandardPaths.DocumentsLocation)[0]))
-        dialog.setNameFilter(QCoreApplication.translate('FileDialog', 'PNG Image(*.png);;SVG Image(*.svg);;PDF Document(*.pdf)'))
+        dialog.setNameFilter(QCoreApplication.translate('FileDialog', 'PDF Document(*.pdf);;SVG Image(*.svg)'))
         dialog.setWindowTitle(QCoreApplication.translate('FileDialog', 'Save plot'))
         dialog.fileSelected.connect(self._savePlot)
         dialog.open()
 
     def _select_callback(self, eclick: MouseEvent, erelease: MouseEvent):
-        self.setMinX(prettyFloor(min(eclick.xdata, erelease.xdata)))
-        self.setMaxX(prettyCeil(max(eclick.xdata, erelease.xdata)))
-        self.setMinY(prettyFloor(min(eclick.ydata, erelease.ydata)))
-        self.setMaxY(prettyCeil(max(eclick.ydata, erelease.ydata)))
+        self.setLeft(prettyFloor(min(eclick.xdata, erelease.xdata)))
+        self.setRight(prettyCeil(max(eclick.xdata, erelease.xdata)))
+        self.setBottom(prettyFloor(min(eclick.ydata, erelease.ydata)))
+        self.setTop(prettyCeil(max(eclick.ydata, erelease.ydata)))
         self._update()
         pass
 
@@ -822,7 +833,7 @@ class Recon(QMainWindow):
             self.statusBar().clearMessage()
 
     def _show_status_message(self, x: float) -> None:
-        msg = QCoreApplication.translate('status', 'Time: {0:g} [s]').format(x)
+        msg = QCoreApplication.translate('Status', 'Time: {0:g} [s]').format(x)
         i = self.timeToIndex(x)
         if i >= 0:
             for signal in self.signals:
@@ -863,7 +874,7 @@ class Recon(QMainWindow):
 
     def _open_recent(self):
         action: QAction = self.sender()
-        self._load(action.text())
+        self._loadReconText(action.text())
 
     @Slot()
     def _help(self):
@@ -895,7 +906,7 @@ class Recon(QMainWindow):
             if self.signals[i].color is None:
                 self.signals[i].color = colors[i % len(colors)]
 
-    def _load(self, filename: str) -> None:
+    def _loadReconText(self, filename: str) -> None:
         if os.path.isfile(filename):
             self.dataFileName = filename
             doAutoRange = True
@@ -932,13 +943,15 @@ class Recon(QMainWindow):
                     if len(data) >= 5:
                         self.axisY = data[4]
                     if len(data) >= 6:
-                        self.min_x = float(data[5])
+                        self.range.left = float(data[5])
                     if len(data) >= 7:
-                        self.max_x = float(data[6])
+                        self.range.right = float(data[6])
                     if len(data) >= 8:
-                        self.min_y = float(data[7])
+                        self.range.bottom = float(data[7])
                     if len(data) >= 9:
-                        self.max_y = float(data[8])
+                        self.range.top = float(data[8])
+                    if len(data) >= 10:
+                        self.lineWidth = float(data[9])
                         doAutoRange = False
 
                 # Get signal names
@@ -998,7 +1011,7 @@ class Recon(QMainWindow):
             self.rebuildSignalsDock()
             self._update()
 
-    def _save(self, filename: str) -> None:
+    def _saveReconText(self, filename: str) -> None:
         with open(filename, 'w', encoding='cp1251') as df:
 
             self._add_to_recent(filename)
@@ -1013,10 +1026,11 @@ class Recon(QMainWindow):
                 self.originalFileName,
                 self.axisX,
                 self.axisY,
-                f'{self.min_x:g}',
-                f'{self.max_x:g}',
-                f'{self.min_y:g}',
-                f'{self.max_y:g}'
+                f'{self.range.left:g}',
+                f'{self.range.right:g}',
+                f'{self.range.bottom:g}',
+                f'{self.range.top:g}',
+                f'{self.lineWidth:g}'
             ]) + '\n\n')
 
             # write signals descriptions
@@ -1077,10 +1091,10 @@ class Recon(QMainWindow):
         for signal in self.signals:
             if signal.selected:
                 signal.update()
-                self.ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=1, color=signal.color)
+                self.ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=self.lineWidth, color=signal.color)
                 addLegend = True
 
-        self.ax.axis([self.min_x, self.max_x, self.min_y, self.max_y])
+        self.ax.axis([self.range.left, self.range.right, self.range.bottom, self.range.top])
         self.ax.set_title(self.title)
         self.ax.set_xlabel(self.axisX)
         self.ax.set_ylabel(self.axisY)
@@ -1114,9 +1128,9 @@ class Recon(QMainWindow):
 
         for signal in self.signals:
             if signal.selected:
-                ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=0.25, color=signal.color)
+                ax.plot(self.times, signal.getData(), label=signal.getName(), linewidth=self.lineWidth, color=signal.color)
 
-        ax.axis([self.min_x, self.max_x, self.min_y, self.max_y])
+        ax.axis([self.range.left, self.range.right, self.range.bottom, self.range.top])
         ax.set_title(self.title)
         ax.set_xlabel(self.axisX)
         ax.set_ylabel(self.axisY)
@@ -1129,6 +1143,11 @@ class Recon(QMainWindow):
         fig.set_size_inches(self.pageSize.width(), self.pageSize.height())
         fig.savefig(filename, dpi=self.dpi)
         fig.clf()
+
+        self.statusBar().showMessage(
+            QCoreApplication.translate('Status', 'Plot "{0}" saved.').format(filename),
+            timeout=5000
+        )
 
 
 if __name__ == "__main__":
