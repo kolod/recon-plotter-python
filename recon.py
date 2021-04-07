@@ -32,12 +32,29 @@ import matplotlib.widgets
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import MouseEvent, LocationEvent, KeyEvent
-from matplotlib.patches import Rectangle
 
 if qVersion() >= "5.":
     from matplotlib.backends.backend_qt5agg import FigureCanvas
 else:
     from matplotlib.backends.backend_qt4agg import FigureCanvas
+
+
+def prettyFloor(value: float, places: int = 2) -> float:
+    try:
+        result = value
+        f = math.pow(10, int(round(math.log10(abs(value)))) - places + 1)
+        result = math.floor(value / f) * f
+    finally:
+        return result
+
+
+def prettyCeil(value: float, places: int = 2) -> float:
+    try:
+        result = value
+        f = math.pow(10, int(round(math.log10(abs(value)))) - places + 1)
+        result = math.ceil(value / f) * f
+    finally:
+        return result
 
 
 def readCommaSeparatedLine(line: str) -> List[str]:
@@ -358,7 +375,11 @@ class Recon(QMainWindow):
                     self.min_y = min(self.min_y, signal.minimum)
                     self.max_y = max(self.max_y, signal.maximum)
 
-            # TODO: Round values to more beautiful
+            self.min_x = prettyFloor(self.min_x)
+            self.max_x = prettyCeil(self.max_x)
+            self.min_y = prettyFloor(self.min_y)
+            self.max_y = prettyCeil(self.max_y)
+
             self.updateRange()
             self._update()
 
@@ -453,11 +474,11 @@ class Recon(QMainWindow):
 
         # Line width
         self.labelLineWidth = QLabel(QCoreApplication.translate('PlotSettingsDock', 'Line width:'), self.plotSettingsWidget)
-        self.labelLineWidth = DoubleLineEdit(self.plotSettingsWidget)
-        self.labelLineWidth.setDecimals(2)
-        self.labelLineWidth.setValue(self.lineWidth)
-        self.labelLineWidth.valueChanged.connect(self.setLineWidth)
-        self.plotSettingsLayout.addRow(self.labelMaxY, self.labelLineWidth)
+        self.widgetLineWidth = DoubleLineEdit(self.plotSettingsWidget)
+        self.widgetLineWidth.setDecimals(2)
+        self.widgetLineWidth.setValue(self.lineWidth)
+        self.widgetLineWidth.valueChanged.connect(self.setLineWidth)
+        self.plotSettingsLayout.addRow(self.labelLineWidth, self.widgetLineWidth)
 
         # DPI
         self.labelDPI = QLabel(QCoreApplication.translate('PlotSettingsDock', 'DPI:'), self.plotSettingsWidget)
@@ -786,19 +807,19 @@ class Recon(QMainWindow):
         dialog.fileSelected.connect(self._savePlot)
         dialog.open()
 
-    def _select_callback(self, eclick, erelease):
-        self.setMinX(min(eclick.xdata, erelease.xdata))
-        self.setMaxX(max(eclick.xdata, erelease.xdata))
-        self.setMinY(min(eclick.ydata, erelease.ydata))
-        self.setMaxY(max(eclick.ydata, erelease.ydata))
+    def _select_callback(self, eclick: MouseEvent, erelease: MouseEvent):
+        self.setMinX(prettyFloor(min(eclick.xdata, erelease.xdata)))
+        self.setMaxX(prettyCeil(max(eclick.xdata, erelease.xdata)))
+        self.setMinY(prettyFloor(min(eclick.ydata, erelease.ydata)))
+        self.setMaxY(prettyCeil(max(eclick.ydata, erelease.ydata)))
         self._update()
         pass
 
     def _mouse_move(self, event: MouseEvent) -> None:
-        if not event.inaxes:
-            self.statusBar().clearMessage()
-        else:
+        if event.inaxes:
             self._show_status_message(event.xdata)
+        else:
+            self.statusBar().clearMessage()
 
     def _show_status_message(self, x: float) -> None:
         msg = QCoreApplication.translate('status', 'Time: {0:g} [s]').format(x)
