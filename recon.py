@@ -781,9 +781,9 @@ class Recon(QMainWindow):
             dialog = QFileDialog(self)
             dialog.setAcceptMode(QFileDialog.AcceptOpen)
             dialog.setDirectory(QSettings().value('default_data_path', QStandardPaths.standardLocations(QStandardPaths.DocumentsLocation)[0]))
-            dialog.setNameFilter(QCoreApplication.translate('FileDialog', 'Recon data files(*.txt)'))
+            dialog.setNameFilter(QCoreApplication.translate('FileDialog', 'Recon data files(*.txt);;COMTRADE data files(*.cfg)'))
             dialog.setWindowTitle(QCoreApplication.translate('FileDialog', 'Open recon data file'))
-            dialog.fileSelected.connect(self._loadReconText)
+            dialog.fileSelected.connect(self._load)
             dialog.open()
         except Exception as e:
             print(e)
@@ -905,6 +905,18 @@ class Recon(QMainWindow):
         for i in range(len(self.signals)):
             if self.signals[i].color is None:
                 self.signals[i].color = colors[i % len(colors)]
+
+    # TODO: Use mime types
+    def _load(self, filename: str) -> None:
+        if os.path.isfile(filename):
+            dialog: QFileDialog = self.sender()
+            if dialog.selectedNameFilter() == QCoreApplication.translate('FileDialog', 'Recon data files(*.txt)'):
+                self._loadReconText(filename)
+            elif dialog.selectedNameFilter() == QCoreApplication.translate('FileDialog', 'COMTRADE data files(*.cfg)'):
+                self._loadComtrade(filename)
+
+    def _loadComtrade(self, filename: str) -> None:
+        pass
 
     def _loadReconText(self, filename: str) -> None:
         if os.path.isfile(filename):

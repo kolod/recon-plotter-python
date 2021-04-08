@@ -4,9 +4,9 @@
 <context>
     <name>FileDialog</name>
     <message>
-        <location filename="recon.py" line="799"/>
+        <location filename="recon.py" line="914"/>
         <source>Recon data files(*.txt)</source>
-        <translation>Файл данных рекона(*.txt)</translation>
+        <translation type="unfinished">Файлы данных рекона(*.txt)</translation>
     </message>
     <message>
         <location filename="recon.py" line="785"/>
@@ -28,6 +28,16 @@
         <source>PDF Document(*.pdf);;SVG Image(*.svg)</source>
         <translation>Документ PDF(*.pdf);;Изображение SVG(*.svg)</translation>
     </message>
+    <message>
+        <location filename="recon.py" line="784"/>
+        <source>Recon data files(*.txt);;COMTRADE data files(*.cfg)</source>
+        <translation>Файлы данных рекона(*.txt);;Файлы в формате COMTRADE(*.cfg)</translation>
+    </message>
+    <message>
+        <location filename="recon.py" line="916"/>
+        <source>COMTRADE data files(*.cfg)</source>
+        <translation>Файлы в формате COMTRADE(*.cfg)</translation>
+    </message>
 </context>
 <context>
     <name>Help</name>
@@ -40,7 +50,7 @@
 <context>
     <name>Main</name>
     <message>
-        <location filename="recon.py" line="1083"/>
+        <location filename="recon.py" line="1095"/>
         <source>Recon plotter - {0}</source>
         <translation></translation>
     </message>
@@ -372,7 +382,7 @@
         <translation>Время: {0:g} [s]</translation>
     </message>
     <message>
-        <location filename="recon.py" line="1148"/>
+        <location filename="recon.py" line="1160"/>
         <source>Plot &quot;{0}&quot; saved.</source>
         <translation>График {0} сохранён.</translation>
     </message>
