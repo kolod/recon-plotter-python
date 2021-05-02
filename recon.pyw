@@ -21,7 +21,7 @@ from PySide2.QtCore import (
     QMessageLogContext, QtMsgType, qDebug, qInstallMessageHandler, qVersion, QObject, QSizeF, Signal, QCoreApplication, QLocale,
     QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot)
 from PySide2.QtWidgets import (
-    QApplication, QCheckBox, QAbstractItemView, QComboBox, QErrorMessage, QFormLayout,
+    QApplication, QCheckBox, QAbstractItemView, QComboBox, QFormLayout,
     QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction,
     QDockWidget, QLabel, QMenu, QProgressBar, QPushButton, QSizePolicy, QGridLayout,
     QTableWidget,  QWidget, QStyleFactory, QColorDialog)
@@ -113,7 +113,7 @@ class CheckBox(QWidget):
         self.setLayout(QHBoxLayout(self))
         self.layout().addWidget(self.checkbox)
         self.layout().setAlignment(Qt.AlignCenter)
-        self.layout().setMargin(0)
+        self.layout().setContentsMargins(0, 0, 0, 0)
         self.mousePressEvent = self.on_mousePressEvent
 
     def on_mousePressEvent(self, event: QMouseEvent):
@@ -1181,7 +1181,13 @@ def qt_message_handler(mode: QtMsgType, context: QMessageLogContext, message: st
 
 def main():
     path = os.path.dirname(os.path.realpath(__file__))
-    logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', filename=f'{path}/recon.log', filemode='w', encoding='utf-8', level=logging.DEBUG)
+    logging.basicConfig(
+        format='%(asctime)s %(levelname)s: %(message)s',
+        filename=f'{path}/recon.log',
+        filemode='w',
+        encoding='utf-8',
+        level=logging.DEBUG
+    )
     qInstallMessageHandler(qt_message_handler)
 
     qDebug(f'Qt version: {qVersion()}')
