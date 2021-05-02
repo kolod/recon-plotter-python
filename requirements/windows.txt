@@ -1,0 +1,5 @@
+-r base.txt
+matplotlib==3.2.2
+PyQt5==5.9.2
+pywin32==300
+setuptools==56.0.0

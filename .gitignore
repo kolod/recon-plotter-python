@@ -71,8 +71,8 @@ Thumbs.db
 *.dll
 *.exe
 
-/build/*
-/dist/*
+/target/*
+/venv/*
 
 /*.user
 /*.log

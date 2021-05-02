@@ -13,14 +13,19 @@ from time import time
 from typing import Any, List, Optional
 from distutils.util import strtobool
 
+# FBS
+from fbs_runtime.application_context.PyQt5 import ApplicationContext
+
 # Qt
-from PySide2.QtGui import (
+from PyQt5.QtGui import (
     QColor, QCursor, QIcon, QValidator, QDoubleValidator, QIntValidator,
     QPalette, QMouseEvent)
-from PySide2.QtCore import (
-    QMessageLogContext, QtMsgType, qDebug, qInstallMessageHandler, qVersion, QObject, QSizeF, Signal, QCoreApplication, QLocale,
-    QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot)
-from PySide2.QtWidgets import (
+
+from PyQt5.QtCore import (
+    QMessageLogContext, QtMsgType, pyqtSlot, qDebug, qInstallMessageHandler, qVersion, QObject, QSizeF, pyqtSignal, QCoreApplication, QLocale,
+    QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, QtCriticalMsg, QtInfoMsg, QtWarningMsg, QtFatalMsg)
+
+from PyQt5.QtWidgets import (
     QApplication, QCheckBox, QAbstractItemView, QComboBox, QFormLayout,
     QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction,
     QDockWidget, QLabel, QMenu, QProgressBar, QPushButton, QSizePolicy, QGridLayout,
@@ -102,7 +107,7 @@ def writeCommaSeparatedLine(values: List[Any]) -> str:
 
 
 class CheckBox(QWidget):
-    stateChanged = Signal(bool)
+    stateChanged = pyqtSignal(bool)
 
     def __init__(self, state: Optional[bool] = False, parent: Optional[QWidget] = None) -> None:
         super(CheckBox, self).__init__(parent)
@@ -125,7 +130,7 @@ class CheckBox(QWidget):
 
 
 class ClicableLabel(QLabel):
-    clicked = Signal()
+    clicked = pyqtSignal()
 
     def __init__(self, text: str, parent: QWidget) -> None:
         super(ClicableLabel, self).__init__(text, parent)
@@ -148,7 +153,7 @@ class DoubleValidator(QDoubleValidator):
 
 
 class DoubleLineEdit(QLineEdit):
-    valueChanged = Signal(float)
+    valueChanged = pyqtSignal(float)
 
     def __init__(self, parent: Optional[QWidget]) -> None:
         super().__init__(parent=parent)
@@ -160,12 +165,12 @@ class DoubleLineEdit(QLineEdit):
         value = 0 if text == '' else float(text.replace(QLocale().decimalPoint(), '.'))
         self.valueChanged.emit(value)
 
-    @Slot(int)
+    @pyqtSlot(int)
     def setDecimals(self, decimals: int) -> None:
         validator: DoubleValidator = self.validator()
         validator.setDecimals(decimals)
 
-    @Slot(float, float)
+    @pyqtSlot(float, float)
     def setRange(self, bottom: float, top: float) -> None:
         validator: DoubleValidator = self.validator()
         validator.setBottom(bottom)
@@ -175,7 +180,7 @@ class DoubleLineEdit(QLineEdit):
         text = self.text()
         return 0 if text == '' else float(text.replace(QLocale().decimalPoint(), '.'))
 
-    @Slot(float)
+    @pyqtSlot(float)
     def setValue(self, value: float) -> None:
         if value is None:
             self.setText('')
@@ -184,8 +189,8 @@ class DoubleLineEdit(QLineEdit):
 
 
 class AnalogSignal(QObject):
-    minimumChanged = Signal(float)
-    maximumChanged = Signal(float)
+    minimumChanged = pyqtSignal(float)
+    maximumChanged = pyqtSignal(float)
 
     def __init__(self, name: str = '', unit: str = 'V', data: List[float] = None) -> None:
         super(AnalogSignal, self).__init__()
@@ -275,7 +280,8 @@ class Range(object):
 
 class Recon(QMainWindow):
 
-    def __init__(self) -> None:
+    def __init__(self, appctxt: ApplicationContext) -> None:
+        self.appctxt = appctxt
         self.name: str = ''
         self.dataFileName: str = ''
         self.plotFileName: str = ''
@@ -302,49 +308,49 @@ class Recon(QMainWindow):
         self.restoreSession()
         self._update_recent_list()
 
-    @Slot(int)
+    @pyqtSlot(int)
     def setPageSize(self, index: int) -> None:
         self.pageSize = self.widgetSize.itemData(index)
 
-    @Slot(float)
+    @pyqtSlot(float)
     def setDPI(self, dpi: float) -> None:
         self.dpi = dpi
 
-    @Slot(str)
+    @pyqtSlot(str)
     def setTitle(self, title: str) -> None:
         self.title = title
 
-    @Slot(str)
+    @pyqtSlot(str)
     def setAxisX(self, axisX: str) -> None:
         self.axisX = axisX
 
-    @Slot(str)
+    @pyqtSlot(str)
     def setAxisY(self, axisY: str) -> None:
         self.axisY = axisY
 
-    @Slot(float)
+    @pyqtSlot(float)
     def setLineWidth(self, width: float) -> None:
         self.lineWidth = width
 
-    @Slot(float)
+    @pyqtSlot(float)
     def setLeft(self, value: float) -> None:
         self.range.left = value
         if self.widgetLeft.value() != value:
             self.widgetLeft.setValue(value)
 
-    @Slot(float)
+    @pyqtSlot(float)
     def setRight(self, value: float) -> None:
         self.range.right = value
         if self.widgetRight.value() != value:
             self.widgetRight.setValue(value)
 
-    @Slot(float)
+    @pyqtSlot(float)
     def setBottom(self, value: float) -> None:
         self.range.bottom = value
         if self.widgetBottom.value() != value:
             self.widgetBottom.setValue(value)
 
-    @Slot(float)
+    @pyqtSlot(float)
     def setTop(self, value: float) -> None:
         self.range.top = value
         if self.widgetTop.value() != value:
@@ -363,8 +369,8 @@ class Recon(QMainWindow):
                 return False
         return True
 
-    @Slot()
-    @Slot(bool)
+    @pyqtSlot()
+    @pyqtSlot(bool)
     def autoRange(self):
         if len(self.times) and len(self.signals):
 
@@ -557,55 +563,55 @@ class Recon(QMainWindow):
 
         # File actions
         self.actionOpen = QAction(QCoreApplication.translate('Menu', '&Open...'), self)
-        self.actionOpen.setIcon(QIcon('icons/document-open-symbolic.svg'))
+        self.actionOpen.setIcon(QIcon(self.appctxt.get_resource('icons/document-open-symbolic.svg')))
         self.actionOpen.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+O'))
         self.actionOpen.setStatusTip(QCoreApplication.translate('Menu', 'Open the recon data in the text format'))
         self.actionOpen.triggered.connect(self.openData)
 
         self.actionSave = QAction(QCoreApplication.translate('Menu', '&Save'), self)
-        self.actionSave.setIcon(QIcon('icons/document-save-symbolic.svg'))
+        self.actionSave.setIcon(QIcon(self.appctxt.get_resource('icons/document-save-symbolic.svg')))
         self.actionSave.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+S'))
         self.actionSave.setStatusTip(QCoreApplication.translate('Menu', 'Save the recon data in the text format'))
         self.actionSave.setDisabled(True)
         self.actionSave.triggered.connect(self.saveData)
 
         self.actionSaveAs = QAction(QCoreApplication.translate('Menu', 'Save &as...'), self)
-        self.actionSaveAs.setIcon(QIcon('icons/document-save-as-symbolic.svg'))
+        self.actionSaveAs.setIcon(QIcon(self.appctxt.get_resource('icons/document-save-as-symbolic.svg')))
         self.actionSaveAs.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Shift+S'))
         self.actionSaveAs.setDisabled(True)
         self.actionSaveAs.setStatusTip(QCoreApplication.translate('Menu', 'Save the recon data in the text format as...'))
         self.actionSaveAs.triggered.connect(self.saveDataAs)
 
         self.actionExit = QAction(QCoreApplication.translate('Menu', '&Exit'), self)
-        self.actionExit.setIcon(QIcon('icons/window-close-symbolic.svg'))
+        self.actionExit.setIcon(QIcon(self.appctxt.get_resource('icons/window-close-symbolic.svg')))
         self.actionExit.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Q'))
         self.actionExit.setStatusTip(QCoreApplication.translate('Menu', 'Exit application'))
         self.actionExit.triggered.connect(self.close)
 
         # Plot actions
         self.actionAutoRange = QAction(QCoreApplication.translate('Menu', 'Fit to signal &range'))
-        self.actionAutoRange.setIcon(QIcon('icons/zoom-fit-best-symbolic.svg'))
+        self.actionAutoRange.setIcon(QIcon(self.appctxt.get_resource('icons/zoom-fit-best-symbolic.svg')))
         self.actionAutoRange.setShortcut(QCoreApplication.translate('Menu', 'F4'))
         self.actionAutoRange.setStatusTip(QCoreApplication.translate('Menu', 'Recalculate signals limits & update plot ranges'))
         self.actionAutoRange.setDisabled(True)
         self.actionAutoRange.triggered.connect(self.autoRange)
 
         self.actionBuildPlot = QAction(QCoreApplication.translate('Menu', '&Update'), self)
-        self.actionBuildPlot.setIcon(QIcon('icons/view-refresh-symbolic.svg'))
+        self.actionBuildPlot.setIcon(QIcon(self.appctxt.get_resource('icons/view-refresh-symbolic.svg')))
         self.actionBuildPlot.setShortcut(QCoreApplication.translate('Menu', 'F5'))
         self.actionBuildPlot.setStatusTip(QCoreApplication.translate('Menu', 'Update plot'))
         self.actionBuildPlot.setDisabled(True)
         self.actionBuildPlot.triggered.connect(self._update)
 
         self.actionSavePlot = QAction(QCoreApplication.translate('Menu', '&Save plot'), self)
-        self.actionSavePlot.setIcon(QIcon('icons/document-save-symbolic.svg'))
+        self.actionSavePlot.setIcon(QIcon(self.appctxt.get_resource('icons/document-save-symbolic.svg')))
         self.actionSavePlot.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Alt+S'))
         self.actionSavePlot.setStatusTip(QCoreApplication.translate('Menu', 'Save plot'))
         self.actionSavePlot.setDisabled(True)
         self.actionSavePlot.triggered.connect(self.savePlot)
 
         self.actionSavePlotAs = QAction(QCoreApplication.translate('Menu', 'Save plot &as...'), self)
-        self.actionSavePlotAs.setIcon(QIcon('icons/document-save-as-symbolic.svg'))
+        self.actionSavePlotAs.setIcon(QIcon(self.appctxt.get_resource('icons/document-save-as-symbolic.svg')))
         self.actionSavePlotAs.setShortcut(QCoreApplication.translate('Menu', 'Ctrl+Alt+Shift+S'))
         self.actionSavePlotAs.setStatusTip(QCoreApplication.translate('Menu', 'Save plot as...'))
         self.actionSavePlotAs.setDisabled(True)
@@ -619,18 +625,18 @@ class Recon(QMainWindow):
         self.actionSettingsDock.setStatusTip(QCoreApplication.translate('Menu', 'Show/hide plot settings window'))
 
         self.actionFullScreen = QAction(QCoreApplication.translate('Menu', '&Full screan'))
-        self.actionFullScreen.setIcon(QIcon('icons/view-fullscreen-symbolic.svg'))
+        self.actionFullScreen.setIcon(QIcon(self.appctxt.get_resource('icons/view-fullscreen-symbolic.svg')))
         self.actionFullScreen.setStatusTip(QCoreApplication.translate('Menu', 'Show plot in full screan'))
         self.actionFullScreen.setShortcut(QCoreApplication.translate('Menu', 'F11'))
         self.actionFullScreen.triggered.connect(self._fullscreen)
 
         # Help actions
         self.actionAboutQt = QAction(QCoreApplication.translate('Menu', 'About Qt...'), self)
-        self.actionAboutQt.setIcon(QIcon('icons/help-about-symbolic.svg'))
+        self.actionAboutQt.setIcon(QIcon(self.appctxt.get_resource('icons/help-about-symbolic.svg')))
         self.actionAboutQt.triggered.connect(QApplication.aboutQt)
 
         self.actionHelp = QAction(QCoreApplication.translate('Menu', 'Show manual'))
-        self.actionHelp.setIcon(QIcon('icons/help-contents-symbolic.svg'))
+        self.actionHelp.setIcon(QIcon(self.appctxt.get_resource('icons/help-contents-symbolic.svg')))
         self.actionHelp.setShortcut(QCoreApplication.translate('Menu', 'F1'))
         self.actionHelp.setStatusTip(QCoreApplication.translate('Menu', 'Show application manual'))
         self.actionHelp.triggered.connect(self._help)
@@ -638,7 +644,7 @@ class Recon(QMainWindow):
         menubar = self.menuBar()
 
         self.menuRecent = QMenu(QCoreApplication.translate('Menu', 'Open &recent'))
-        self.menuRecent.setIcon(QIcon('icons/document-open-recent-symbolic.svg'))
+        self.menuRecent.setIcon(QIcon(self.appctxt.get_resource('icons/document-open-recent-symbolic.svg')))
 
         menuFile = menubar.addMenu(QCoreApplication.translate('Menu', '&File'))
         menuFile.addActions([self.actionOpen, self.actionSave, self.actionSaveAs])
@@ -662,8 +668,8 @@ class Recon(QMainWindow):
 
     def restoreSession(self) -> None:
         settings = QSettings()
-        self.restoreGeometry(settings.value('geometry'))
-        self.restoreState(settings.value('state'))
+        self.restoreGeometry(settings.value('geometry', self.saveGeometry()))
+        self.restoreState(settings.value('state', self.saveState()))
         self.widgetDPI.setValue(float(settings.value('dpi', 600.0)))
         self.widgetSize.setCurrentIndex(settings.value('size', self.widgetSize.currentIndex()))
 
@@ -877,16 +883,16 @@ class Recon(QMainWindow):
         action: QAction = self.sender()
         self._loadReconText(action.text())
 
-    @Slot()
+    @pyqtSlot()
     def _help(self):
-        os.startfile(QCoreApplication.translate('Help', '"manual\\Recon Plotter Manual.pdf"'))
+        os.startfile(self.appctxt.get_resource(QCoreApplication.translate('Help', 'Recon Plotter Manual.pdf')))
 
     def _key(self, event: KeyEvent):
         if event.key in ['escape', 'f11']:
             self._fullscreen()
 
-    @ Slot()
-    @ Slot(bool)
+    @pyqtSlot()
+    @pyqtSlot(bool)
     def _fullscreen(self):
         if self.plot.isFullScreen():
             self.plot.setWindowFlags(Qt.SubWindow)
@@ -943,7 +949,8 @@ class Recon(QMainWindow):
                 self.progressBegin(total)
 
                 # Get name of the recon record
-                if line := df.readline():
+                line = df.readline()
+                if line:
                     data = readCommaSeparatedLine(line)
                     if len(data) >= 1:
                         self.title = data[0]
@@ -968,10 +975,12 @@ class Recon(QMainWindow):
                         doAutoRange = False
 
                 # Get signal names
-                while (line := df.readline()) != '':
+                line = df.readline()
+                while line != '':
                     signal = None
                     data = readCommaSeparatedLine(line)
                     if len(data) and data[0] == '1':
+                        line = df.readline()
                         continue
                     if len(data) and data[0] == 'N':
                         break
@@ -986,19 +995,24 @@ class Recon(QMainWindow):
                     if signal is not None:
                         self.signals.append(signal)
 
+                    line = df.readline()
+
                 # Update progress
                 self.progressUpdate(df.tell())
                 lasttime = time()
 
                 # Get signal data
-                while line := df.readline():
+                line = df.readline()
+                while line:
                     values = line.split(',')
                     if len(values) == (len(self.signals) + 3):
                         if values[0].strip() == 'N':
+                            line = df.readline()
                             continue
                         if values[0].strip() == '':
                             for i in range(len(self.signals)):
                                 self.signals[i].unit = values[i+2].strip()
+                            line = df.readline()
                             continue
                         for i in range(len(self.signals)):
                             self.signals[i].append(float(values[i+2].strip()))
@@ -1009,6 +1023,8 @@ class Recon(QMainWindow):
                     if (newtime - lasttime > 0.1):
                         lasttime = newtime
                         self.progressUpdate(df.tell())
+
+                    line = df.readline()
 
             self.progressEnd()
             self._set_colors()
@@ -1164,56 +1180,63 @@ class Recon(QMainWindow):
 
 
 def qt_message_handler(mode: QtMsgType, context: QMessageLogContext, message: str):
-    if mode == QtMsgType.QtDebugMsg:
-        logging.debug(message)
-    elif mode == QtMsgType.QtCriticalMsg:
+    if mode == QtCriticalMsg:
         logging.critical(message)
-    elif mode == QtMsgType.QtFatalMsg:
-        logging.critical(message)
-    elif mode == QtMsgType.QtInfoMsg:
-        logging.info(message)
-    elif mode == QtMsgType.QtSystemMsg:
-        logging.debug(message)
-    elif mode == QtMsgType.QtWarningMsg:
+    elif mode == QtWarningMsg:
         logging.warning(message)
+    elif mode == QtInfoMsg:
+        logging.info(message)
+    else:
+        logging.debug(message)
     print(message)
 
 
 def main():
-    path = os.path.dirname(os.path.realpath(__file__))
-    logging.basicConfig(
-        format='%(asctime)s %(levelname)s: %(message)s',
-        filename=f'{path}/recon.log',
-        filemode='w',
-        encoding='utf-8',
-        level=logging.DEBUG
-    )
-    qInstallMessageHandler(qt_message_handler)
-
-    qDebug(f'Qt version: {qVersion()}')
 
     # Increase matplotlib limit
     matplotlib.rcParams['agg.path.chunksize'] = 100000
+
+    appctxt = ApplicationContext()
 
     app = QApplication(sys.argv)
     app.setOrganizationName('Oleksandr Kolodkin')
     app.setApplicationName('Recon Plotter')
     app.setStyle(QStyleFactory.create('Fusion'))
 
+    # Make log directory if not exists
+    log_path = QStandardPaths.standardLocations(QStandardPaths.DataLocation)[0]
+    os.makedirs(log_path, exist_ok=True)
+    print(f'Start log file: {log_path}/recon.log')
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    handler = logging.FileHandler(f'{log_path}/recon.log', 'w', 'utf-8')
+    handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s: %(message)s'))
+    root_logger.addHandler(handler)
+
+    qInstallMessageHandler(qt_message_handler)
+
+    qDebug(f'Qt version: {qVersion()}')
+    qDebug(f'System language: {QLocale.languageToString(QLocale().language())}')
+
     qtTranslator = QTranslator(app)
-    ok: bool = qtTranslator.load(QLocale(), 'qt', '_', QLibraryInfo.location(QLibraryInfo.TranslationsPath))
+    ok: bool = qtTranslator.load(QLocale(), 'qtbase', '_', QLibraryInfo.location(QLibraryInfo.TranslationsPath))
+    if ok:
+        app.installTranslator(qtTranslator)
+    qDebug(f'Qt translations location: {QLibraryInfo.location(QLibraryInfo.TranslationsPath)}')
     qDebug('The system translation loaded successfully.' if ok else 'Failed to load the system translation.')
-    app.installTranslator(qtTranslator)
 
     myTranslator = QTranslator(app)
-    ok: bool = myTranslator.load(QLocale(), 'recon', '_', '.', '.qm')
+    ok: bool = myTranslator.load(QLocale(), 'recon', '_', appctxt.get_resource('.'), '.qm')
+    if ok:
+        app.installTranslator(myTranslator)
     qDebug('The application translation loaded successfully.' if ok else 'Failed to load the application translation.')
-    app.installTranslator(myTranslator)
 
-    window = Recon()
+    window = Recon(appctxt)
     window.show()
 
-    sys.exit(app.exec_())
+    exit_code = appctxt.app.exec()
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

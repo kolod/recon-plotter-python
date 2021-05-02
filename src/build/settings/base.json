@@ -1,0 +1,11 @@
+{
+    "app_name": "Recon Plotter",
+    "author": "Oleksandr Kolodkin",
+    "main_module": "src/main/python/main.py",
+    "version": "1.0.0",
+    "files_to_filter": [
+        "src/main/python/recon_ru.ts",
+        "src/main/python/recon_uk.ts",
+        "src/main/python/recon.pro"
+    ]
+}
