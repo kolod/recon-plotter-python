@@ -7,6 +7,7 @@ import os
 import sys
 import math
 import numpy
+import logging
 
 from time import time
 from typing import Any, List, Optional
@@ -17,10 +18,10 @@ from PySide2.QtGui import (
     QColor, QCursor, QIcon, QValidator, QDoubleValidator, QIntValidator,
     QPalette, QMouseEvent)
 from PySide2.QtCore import (
-    qVersion, QObject, QSizeF, Signal, QCoreApplication, QLocale,
+    QMessageLogContext, QtMsgType, qDebug, qInstallMessageHandler, qVersion, QObject, QSizeF, Signal, QCoreApplication, QLocale,
     QSettings, Qt, QTranslator, QLibraryInfo, QStandardPaths, QEventLoop, Slot)
 from PySide2.QtWidgets import (
-    QApplication, QCheckBox, QAbstractItemView, QComboBox, QFormLayout,
+    QApplication, QCheckBox, QAbstractItemView, QComboBox, QErrorMessage, QFormLayout,
     QHBoxLayout, QLineEdit, QMainWindow, QHeaderView, QFileDialog, QAction,
     QDockWidget, QLabel, QMenu, QProgressBar, QPushButton, QSizePolicy, QGridLayout,
     QTableWidget,  QWidget, QStyleFactory, QColorDialog)
@@ -786,7 +787,7 @@ class Recon(QMainWindow):
             dialog.fileSelected.connect(self._load)
             dialog.open()
         except Exception as e:
-            print(e)
+            qDebug(e)
 
     def saveData(self):
         os.path.isfile(self.dataFileName) if self._saveReconText(self.dataFileName) else self.saveDataAs()
@@ -801,7 +802,7 @@ class Recon(QMainWindow):
             dialog.fileSelected.connect(self._saveReconText)
             dialog.open()
         except Exception as e:
-            print(e)
+            qDebug(e)
 
     def savePlot(self) -> None:
         if hasattr(self, 'plotFileName') and self.plotFileName is not None and os.path.isfile(self.plotFileName):
@@ -1162,9 +1163,28 @@ class Recon(QMainWindow):
         )
 
 
-if __name__ == "__main__":
+def qt_message_handler(mode: QtMsgType, context: QMessageLogContext, message: str):
+    if mode == QtMsgType.QtDebugMsg:
+        logging.debug(message)
+    elif mode == QtMsgType.QtCriticalMsg:
+        logging.critical(message)
+    elif mode == QtMsgType.QtFatalMsg:
+        logging.critical(message)
+    elif mode == QtMsgType.QtInfoMsg:
+        logging.info(message)
+    elif mode == QtMsgType.QtSystemMsg:
+        logging.debug(message)
+    elif mode == QtMsgType.QtWarningMsg:
+        logging.warning(message)
+    print(message)
 
-    print(f'Qt version: {qVersion()}')
+
+def main():
+    path = os.path.dirname(os.path.realpath(__file__))
+    logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', filename=f'{path}/recon.log', filemode='w', encoding='utf-8', level=logging.DEBUG)
+    qInstallMessageHandler(qt_message_handler)
+
+    qDebug(f'Qt version: {qVersion()}')
 
     # Increase matplotlib limit
     matplotlib.rcParams['agg.path.chunksize'] = 100000
@@ -1175,14 +1195,20 @@ if __name__ == "__main__":
     app.setStyle(QStyleFactory.create('Fusion'))
 
     qtTranslator = QTranslator(app)
-    qtTranslator.load(QLocale(), 'qt', '_', QLibraryInfo.location(QLibraryInfo.TranslationsPath))
+    ok: bool = qtTranslator.load(QLocale(), 'qt', '_', QLibraryInfo.location(QLibraryInfo.TranslationsPath))
+    qDebug('The system translation loaded successfully.' if ok else 'Failed to load the system translation.')
     app.installTranslator(qtTranslator)
 
     myTranslator = QTranslator(app)
-    myTranslator.load(QLocale(), 'recon', '_', '.', '.qm')
+    ok: bool = myTranslator.load(QLocale(), 'recon', '_', '.', '.qm')
+    qDebug('The application translation loaded successfully.' if ok else 'Failed to load the application translation.')
     app.installTranslator(myTranslator)
 
     window = Recon()
     window.show()
 
     sys.exit(app.exec_())
+
+
+if __name__ == "__main__":
+    main()
