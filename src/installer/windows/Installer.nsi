@@ -1,11 +1,18 @@
 ﻿Unicode True
+SetCompressor /SOLID lzma
+SetCompressorDictSize 64
+SetDatablockOptimize ON
 
 !include MUI2.nsh
 !include FileFunc.nsh
+!include nsProcess.nsh
 !include EnumUsersReg.nsh
 
-!define MUI_ICON "..\Recon Plotter\Icon.ico"
-!define MUI_UNICON "..\Recon Plotter\Icon.ico"
+!define MUI_ICON "${NSISDIR}\Contrib\Graphics\Icons\orange-install.ico"
+!define MUI_UNICON "${NSISDIR}\Contrib\Graphics\Icons\orange-uninstall.ico"
+
+#!define MUI_ICON "..\Recon Plotter\Icon.ico"
+#!define MUI_UNICON "..\Recon Plotter\Icon.ico"
 
 !getdllversion "..\Recon Plotter\Recon Plotter.exe" ver
 !define VERSION "${ver1}.${ver2}.${ver3}.${ver4}"
@@ -58,14 +65,12 @@ FunctionEnd
 ;--------------------------------
 ;Pages
 
-  !define MUI_WELCOMEPAGE_TEXT "This wizard will guide you through the installation of Recon Plotter.$\r$\n$\r$\n$\r$\nClick Next to continue."
   !insertmacro MUI_PAGE_WELCOME
   !insertmacro MUI_PAGE_DIRECTORY
   !insertmacro MUI_PAGE_INSTFILES
     !define MUI_FINISHPAGE_NOAUTOCLOSE
     !define MUI_FINISHPAGE_RUN
     !define MUI_FINISHPAGE_RUN_CHECKED
-    !define MUI_FINISHPAGE_RUN_TEXT "Run Recon Plotter"
     !define MUI_FINISHPAGE_RUN_FUNCTION "LaunchLink"
   !insertmacro MUI_PAGE_FINISH
 
@@ -78,6 +83,18 @@ FunctionEnd
   !insertmacro MUI_LANGUAGE "English"
   !insertmacro MUI_LANGUAGE "Russian"
   !insertmacro MUI_LANGUAGE "Ukrainian"
+
+  LangString MESSAGE_REMOVE_USER_SETTINGS ${LANG_ENGLISH}   "Removing registry key"
+  LangString MESSAGE_REMOVE_USER_SETTINGS ${LANG_RUSSIAN}   "Удаление ключа реестра"
+  LangString MESSAGE_REMOVE_USER_SETTINGS ${LANG_UKRAINIAN} "Видалення ключа реєстру"
+
+  LangString MESSAGE_STILL_RUNNING ${LANG_ENGLISH}   "is running. Closing it down"
+  LangString MESSAGE_STILL_RUNNING ${LANG_RUSSIAN}   "ещё работает. Завершение"
+  LangString MESSAGE_STILL_RUNNING ${LANG_UKRAINIAN} "ще працюэ. Завершення"
+
+  LangString MESSAGE_CLOSE_WAITING ${LANG_ENGLISH}   "Waiting for Recon Plotter to close"
+  LangString MESSAGE_CLOSE_WAITING ${LANG_RUSSIAN}   "Ожидание завершения"
+  LangString MESSAGE_CLOSE_WAITING ${LANG_UKRAINIAN} "Очікування завершення"
 
 ;--------------------------------
 ;Installer Sections
@@ -105,6 +122,17 @@ SectionEnd
 
 Section "Uninstall"
 
+  ; Check is programm still running and close it
+  !addplugindir "."  
+  ${nsProcess::FindProcess} "Recon Plotter.exe" $R0  
+  ${If} $R0 == 0
+      DetailPrint "Recon Plotter $(MESSAGE_STILL_RUNNING)"
+      ${nsProcess::CloseProcess} "Recon Plotter.exe" $R0
+      DetailPrint "$(MESSAGE_CLOSE_WAITING)"
+      Sleep 5000
+  ${EndIf}
+  ${nsProcess::Unload}
+
   RMDir /r "$InstDir"
   RMDir /r "$LOCALAPPDATA\Oleksandr Kolodkin\Recon Plotter"
   Delete "$SMPROGRAMS\Recon Plotter.lnk"
@@ -124,5 +152,5 @@ FunctionEnd
 Function un.RemoveUserSettings
   Pop $0
   DeleteRegKey HKU "$0\SOFTWARE\Oleksandr Kolodkin\Recon Plotter"
-  DetailPrint "Removed registry key: $0\SOFTWARE\Oleksandr Kolodkin\Recon Plotter"
+  DetailPrint "$(MESSAGE_REMOVE_USER_SETTINGS): $0\SOFTWARE\Oleksandr Kolodkin\Recon Plotter"
 FunctionEnd

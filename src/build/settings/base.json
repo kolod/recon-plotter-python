@@ -6,6 +6,8 @@
     "files_to_filter": [
         "src/main/python/recon_ru.ts",
         "src/main/python/recon_uk.ts",
-        "src/main/python/recon.pro"
+        "src/main/python/recon.pro",
+        "src/main/icons/icon.svg",
+        "src/main/icons/icon.ico"
     ]
 }
